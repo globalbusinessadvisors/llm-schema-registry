@@ -1,0 +1,55 @@
+[package]
+name = "llm-integrations"
+version = "0.1.0"
+edition = "2021"
+authors = ["Schema Registry Team"]
+description = "LLM module integrations for Schema Registry (Prompt, RAG, Serving, Training, Eval)"
+
+[dependencies]
+# Core dependencies
+schema-registry-core = { path = "../schema-registry-core" }
+schema-registry-api = { path = "../schema-registry-api" }
+schema-registry-validation = { path = "../schema-registry-validation" }
+
+# Async runtime
+tokio = { version = "1.43", features = ["full"] }
+tokio-retry = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# HTTP client
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+
+# Event bus
+rdkafka = { version = "0.36", features = ["cmake-build", "ssl", "sasl"], optional = true }
+lapin = { version = "2.3", optional = true }  # RabbitMQ
+
+# Error handling
+thiserror = "2.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+
+# Caching
+moka = { version = "0.12", features = ["future"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+# Async traits
+async-trait = "0.1"
+
+[dev-dependencies]
+mockito = "1.6"
+wiremock = "0.6"
+
+[features]
+default = []
+kafka = ["rdkafka"]
+rabbitmq = ["lapin"]

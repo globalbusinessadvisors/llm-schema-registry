@@ -1,0 +1,50 @@
+# Cargo Tarpaulin Configuration
+# Code coverage tool for Rust
+
+[report]
+# Generate multiple report formats
+out = ["Html", "Lcov", "Json", "Xml"]
+
+[tarpaulin]
+# Coverage threshold - build fails if below this
+fail-under = 85.0
+
+# Output directory for reports
+output-dir = "target/coverage"
+
+# Timeout for tests (in seconds)
+timeout = 300
+
+# Follow symbolic links
+follow-exec = true
+
+# Include all packages in workspace
+workspace = true
+
+# Exclude certain paths from coverage
+exclude = [
+    "target/*",
+    "tests/*",
+    "benches/*",
+    "examples/*",
+    "*/build.rs",
+    "*/tests/*",
+    "*/benches/*",
+]
+
+# Exclude files matching patterns
+exclude-files = [
+    "target/*",
+    ".cargo/*",
+    "*/generated/*",
+]
+
+# Run all test types
+all-features = true
+all-targets = true
+
+# Verbose output
+verbose = true
+
+# Color output
+color = "Auto"

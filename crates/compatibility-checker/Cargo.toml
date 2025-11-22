@@ -1,0 +1,61 @@
+[package]
+name = "llm-schema-registry-compatibility"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Schema formats
+jsonschema = { workspace = true }
+apache-avro = { workspace = true }
+prost = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Time
+chrono = { workspace = true }
+
+# Identifiers
+uuid = { workspace = true }
+
+# Hashing
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+# Caching
+moka = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Concurrency
+parking_lot = { workspace = true }
+
+# Collections
+indexmap = "2.1"
+
+# Regex
+regex = "1.10"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util", "macros"] }
+proptest = { workspace = true }
+criterion = { workspace = true }
+mockall = { workspace = true }
+
+[[bench]]
+name = "compatibility_benchmarks"
+harness = false

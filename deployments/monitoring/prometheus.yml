@@ -1,0 +1,58 @@
+# Prometheus configuration for LLM Schema Registry
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'schema-registry'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager:9093'
+
+# Load alert rules
+rule_files:
+  - '/etc/prometheus/alerts.yaml'
+  - '/etc/prometheus/slos.yaml'
+
+# Scrape configurations
+scrape_configs:
+  # Schema Registry metrics
+  - job_name: 'schema-registry'
+    static_configs:
+      - targets: ['schema-registry:9091']
+        labels:
+          service: 'schema-registry-server'
+          component: 'api'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # PostgreSQL exporter (if enabled)
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgresql'
+          component: 'database'
+    scrape_interval: 30s
+
+  # Redis exporter (if enabled)
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+          component: 'cache'
+    scrape_interval: 30s

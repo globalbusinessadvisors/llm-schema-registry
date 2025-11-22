@@ -1,0 +1,25 @@
+# Chaos Mesh: Resource Stress Test
+# Stresses CPU and memory to test resource exhaustion handling
+
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: schema-registry-resource-stress
+  namespace: schema-registry
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - schema-registry
+    labelSelectors:
+      app: schema-registry
+  stressors:
+    cpu:
+      workers: 2
+      load: 80  # 80% CPU load
+    memory:
+      workers: 1
+      size: '256MB'
+  duration: '3m'
+  scheduler:
+    cron: '@every 1h'

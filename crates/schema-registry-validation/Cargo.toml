@@ -1,0 +1,23 @@
+[package]
+name = "schema-registry-validation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+schema-registry-core = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+apache-avro = { workspace = true }
+jsonschema = { workspace = true }
+schemars = { workspace = true }
+prost = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+regex = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+once_cell = { workspace = true }

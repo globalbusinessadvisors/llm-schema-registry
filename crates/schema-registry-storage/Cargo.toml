@@ -1,0 +1,51 @@
+[package]
+name = "schema-registry-storage"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Internal
+schema-registry-core = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Database - PostgreSQL
+sqlx = { workspace = true }
+deadpool-postgres = { workspace = true }
+
+# Database - Redis
+redis = { workspace = true }
+
+# Cloud Storage - S3
+aws-sdk-s3 = { workspace = true }
+aws-config = { workspace = true }
+
+# Caching
+moka = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Concurrency
+parking_lot = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+mockall = { workspace = true }

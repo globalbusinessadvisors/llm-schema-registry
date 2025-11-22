@@ -1,0 +1,521 @@
+-- Performance Optimization Migration
+-- Adds optimized indexes, materialized views, and performance enhancements
+-- PostgreSQL 14+
+
+-- ============================================================================
+-- COVERING INDEXES FOR COMMON QUERIES
+-- ============================================================================
+
+-- Covering index for schema retrieval by namespace/name/version (most common query)
+-- INCLUDE clause adds non-key columns to avoid table lookups
+CREATE INDEX IF NOT EXISTS idx_schemas_lookup_covering
+ON schemas (namespace, name, version_major DESC, version_minor DESC, version_patch DESC)
+INCLUDE (id, format, content, content_hash, state, created_at, updated_at, metadata)
+WHERE state IN ('ACTIVE', 'DEPRECATED');
+
+-- Covering index for latest version lookup
+CREATE INDEX IF NOT EXISTS idx_schemas_latest_version
+ON schemas (namespace, name, state, version_major DESC, version_minor DESC, version_patch DESC)
+INCLUDE (id, content, content_hash, created_at)
+WHERE state = 'ACTIVE';
+
+-- Covering index for content hash lookups (deduplication)
+CREATE INDEX IF NOT EXISTS idx_schemas_content_hash_covering
+ON schemas (content_hash)
+INCLUDE (id, namespace, name, version_major, version_minor, version_patch, state);
+
+-- ============================================================================
+-- PARTIAL INDEXES FOR FILTERED QUERIES
+-- ============================================================================
+
+-- Partial index for active schemas only (reduces index size by ~80%)
+CREATE INDEX IF NOT EXISTS idx_schemas_active_only
+ON schemas (namespace, name, created_at DESC)
+WHERE state = 'ACTIVE';
+
+-- Partial index for recent schemas (last 90 days) - hot data
+CREATE INDEX IF NOT EXISTS idx_schemas_recent_hot
+ON schemas (created_at DESC, namespace, name)
+WHERE created_at > NOW() - INTERVAL '90 days' AND state = 'ACTIVE';
+
+-- Partial index for deprecated schemas requiring migration
+CREATE INDEX IF NOT EXISTS idx_schemas_deprecated
+ON schemas (namespace, name, updated_at DESC)
+WHERE state = 'DEPRECATED';
+
+-- ============================================================================
+-- COMPOSITE INDEXES FOR COMPLEX QUERIES
+-- ============================================================================
+
+-- Composite index for format-specific queries
+CREATE INDEX IF NOT EXISTS idx_schemas_format_namespace
+ON schemas (format, namespace, name, state);
+
+-- Composite index for temporal queries with state
+CREATE INDEX IF NOT EXISTS idx_schemas_temporal_state
+ON schemas (created_at DESC, state, namespace);
+
+-- Composite index for created_by queries (audit/tracking)
+CREATE INDEX IF NOT EXISTS idx_schemas_creator
+ON schemas (created_by, created_at DESC)
+WHERE created_by IS NOT NULL;
+
+-- ============================================================================
+-- GIN INDEXES FOR FULL-TEXT SEARCH AND JSONB
+-- ============================================================================
+
+-- Full-text search on namespace, name, and description
+CREATE INDEX IF NOT EXISTS idx_schemas_fulltext_search
+ON schemas USING GIN (
+    to_tsvector('english',
+        COALESCE(namespace, '') || ' ' ||
+        COALESCE(name, '') || ' ' ||
+        COALESCE(description, '')
+    )
+);
+
+-- Optimized JSONB metadata index with path expressions
+CREATE INDEX IF NOT EXISTS idx_schemas_metadata_gin
+ON schemas USING GIN (metadata jsonb_path_ops);
+
+-- Optimized tags array index
+CREATE INDEX IF NOT EXISTS idx_schemas_tags_gin
+ON schemas USING GIN (tags);
+
+-- ============================================================================
+-- COMPATIBILITY CHECKS OPTIMIZATION
+-- ============================================================================
+
+-- Covering index for compatibility check lookups
+CREATE INDEX IF NOT EXISTS idx_compat_lookup_covering
+ON compatibility_checks (schema_id, compared_schema_id, compatibility_mode)
+INCLUDE (is_compatible, violations, checked_at);
+
+-- Index for recent compatibility checks
+CREATE INDEX IF NOT EXISTS idx_compat_recent
+ON compatibility_checks (checked_at DESC, schema_id)
+WHERE checked_at > NOW() - INTERVAL '30 days';
+
+-- Index for failed compatibility checks (for debugging)
+CREATE INDEX IF NOT EXISTS idx_compat_failures
+ON compatibility_checks (schema_id, checked_at DESC)
+WHERE is_compatible = false;
+
+-- ============================================================================
+-- VALIDATION RESULTS OPTIMIZATION
+-- ============================================================================
+
+-- Covering index for validation cache lookups
+CREATE INDEX IF NOT EXISTS idx_validation_cache_lookup
+ON validation_results (schema_id, data_hash)
+INCLUDE (is_valid, errors, warnings, validated_at);
+
+-- Partial index for recent validations (cache invalidation after 7 days)
+CREATE INDEX IF NOT EXISTS idx_validation_recent
+ON validation_results (validated_at DESC, schema_id)
+WHERE validated_at > NOW() - INTERVAL '7 days';
+
+-- Index for failed validations
+CREATE INDEX IF NOT EXISTS idx_validation_failures
+ON validation_results (schema_id, validated_at DESC)
+WHERE is_valid = false;
+
+-- ============================================================================
+-- SCHEMA EVENTS OPTIMIZATION
+-- ============================================================================
+
+-- Covering index for event sourcing queries
+CREATE INDEX IF NOT EXISTS idx_events_schema_timeline
+ON schema_events (schema_id, created_at DESC)
+INCLUDE (event_type, event_data, created_by);
+
+-- Partial index for recent events (hot data)
+CREATE INDEX IF NOT EXISTS idx_events_recent_hot
+ON schema_events (created_at DESC, event_type)
+WHERE created_at > NOW() - INTERVAL '30 days';
+
+-- GIN index for event_data JSONB queries
+CREATE INDEX IF NOT EXISTS idx_events_data_gin
+ON schema_events USING GIN (event_data jsonb_path_ops);
+
+-- ============================================================================
+-- SCHEMA DEPENDENCIES OPTIMIZATION
+-- ============================================================================
+
+-- Covering index for dependency graph queries
+CREATE INDEX IF NOT EXISTS idx_deps_graph_forward
+ON schema_dependencies (schema_id, dependency_type)
+INCLUDE (depends_on_schema_id, created_at);
+
+-- Reverse dependency lookup (what depends on this schema?)
+CREATE INDEX IF NOT EXISTS idx_deps_graph_reverse
+ON schema_dependencies (depends_on_schema_id, dependency_type)
+INCLUDE (schema_id, created_at);
+
+-- ============================================================================
+-- MATERIALIZED VIEWS FOR ANALYTICS
+-- ============================================================================
+
+-- Materialized view: Schema statistics by namespace
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_schema_stats_by_namespace AS
+SELECT
+    namespace,
+    COUNT(*) as total_schemas,
+    COUNT(*) FILTER (WHERE state = 'ACTIVE') as active_schemas,
+    COUNT(*) FILTER (WHERE state = 'DEPRECATED') as deprecated_schemas,
+    COUNT(*) FILTER (WHERE state = 'DRAFT') as draft_schemas,
+    COUNT(DISTINCT name) as unique_names,
+    MAX(created_at) as latest_schema_created,
+    MIN(created_at) as oldest_schema_created,
+    AVG(LENGTH(content)) as avg_content_size,
+    MAX(LENGTH(content)) as max_content_size
+FROM schemas
+GROUP BY namespace;
+
+CREATE UNIQUE INDEX ON mv_schema_stats_by_namespace (namespace);
+
+-- Materialized view: Popular schemas (for cache warming)
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_popular_schemas AS
+SELECT
+    s.id,
+    s.namespace,
+    s.name,
+    s.version_major,
+    s.version_minor,
+    s.version_patch,
+    s.state,
+    COUNT(v.id) as validation_count,
+    MAX(v.validated_at) as last_accessed
+FROM schemas s
+LEFT JOIN validation_results v ON s.id = v.schema_id
+WHERE s.state = 'ACTIVE'
+  AND v.validated_at > NOW() - INTERVAL '7 days'
+GROUP BY s.id, s.namespace, s.name, s.version_major, s.version_minor, s.version_patch, s.state
+ORDER BY validation_count DESC
+LIMIT 100;
+
+CREATE UNIQUE INDEX ON mv_popular_schemas (id);
+
+-- Materialized view: Schema compatibility matrix
+CREATE MATERIALIZED VIEW IF NOT EXISTS mv_compatibility_matrix AS
+SELECT
+    s1.namespace,
+    s1.name,
+    s1.version_major || '.' || s1.version_minor || '.' || s1.version_patch as from_version,
+    s2.version_major || '.' || s2.version_minor || '.' || s2.version_patch as to_version,
+    cc.compatibility_mode,
+    cc.is_compatible,
+    cc.checked_at
+FROM compatibility_checks cc
+JOIN schemas s1 ON cc.schema_id = s1.id
+JOIN schemas s2 ON cc.compared_schema_id = s2.id
+WHERE cc.checked_at > NOW() - INTERVAL '30 days';
+
+CREATE INDEX ON mv_compatibility_matrix (namespace, name, from_version, to_version);
+
+-- ============================================================================
+-- FUNCTIONS FOR PERFORMANCE OPTIMIZATION
+-- ============================================================================
+
+-- Function: Get latest schema version (optimized)
+CREATE OR REPLACE FUNCTION get_latest_schema_version(
+    p_namespace VARCHAR,
+    p_name VARCHAR
+) RETURNS TABLE (
+    id UUID,
+    version_major INT,
+    version_minor INT,
+    version_patch INT,
+    content TEXT,
+    state VARCHAR
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.id,
+        s.version_major,
+        s.version_minor,
+        s.version_patch,
+        s.content,
+        s.state
+    FROM schemas s
+    WHERE s.namespace = p_namespace
+      AND s.name = p_name
+      AND s.state = 'ACTIVE'
+    ORDER BY s.version_major DESC, s.version_minor DESC, s.version_patch DESC
+    LIMIT 1;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function: Batch get schemas by IDs (optimized)
+CREATE OR REPLACE FUNCTION get_schemas_by_ids(
+    p_ids UUID[]
+) RETURNS TABLE (
+    id UUID,
+    namespace VARCHAR,
+    name VARCHAR,
+    version_major INT,
+    version_minor INT,
+    version_patch INT,
+    format VARCHAR,
+    content TEXT,
+    state VARCHAR
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.id,
+        s.namespace,
+        s.name,
+        s.version_major,
+        s.version_minor,
+        s.version_patch,
+        s.format,
+        s.content,
+        s.state
+    FROM schemas s
+    WHERE s.id = ANY(p_ids)
+      AND s.state IN ('ACTIVE', 'DEPRECATED');
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Function: Search schemas with full-text search (optimized)
+CREATE OR REPLACE FUNCTION search_schemas(
+    p_query TEXT,
+    p_limit INT DEFAULT 100
+) RETURNS TABLE (
+    id UUID,
+    namespace VARCHAR,
+    name VARCHAR,
+    version VARCHAR,
+    description TEXT,
+    rank REAL
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT
+        s.id,
+        s.namespace,
+        s.name,
+        s.version_major || '.' || s.version_minor || '.' || s.version_patch as version,
+        s.description,
+        ts_rank(
+            to_tsvector('english',
+                COALESCE(s.namespace, '') || ' ' ||
+                COALESCE(s.name, '') || ' ' ||
+                COALESCE(s.description, '')
+            ),
+            plainto_tsquery('english', p_query)
+        ) as rank
+    FROM schemas s
+    WHERE to_tsvector('english',
+            COALESCE(s.namespace, '') || ' ' ||
+            COALESCE(s.name, '') || ' ' ||
+            COALESCE(s.description, '')
+          ) @@ plainto_tsquery('english', p_query)
+      AND s.state = 'ACTIVE'
+    ORDER BY rank DESC
+    LIMIT p_limit;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- ============================================================================
+-- QUERY OPTIMIZATION SETTINGS
+-- ============================================================================
+
+-- Enable query plan caching
+ALTER DATABASE postgres SET plan_cache_mode = 'auto';
+
+-- Set work_mem for complex queries (adjust based on available RAM)
+ALTER DATABASE postgres SET work_mem = '256MB';
+
+-- Set effective_cache_size (adjust based on available RAM)
+ALTER DATABASE postgres SET effective_cache_size = '4GB';
+
+-- Set shared_buffers (adjust based on available RAM)
+ALTER DATABASE postgres SET shared_buffers = '1GB';
+
+-- Enable parallel query execution
+ALTER DATABASE postgres SET max_parallel_workers_per_gather = 4;
+ALTER DATABASE postgres SET max_worker_processes = 8;
+
+-- Enable JIT compilation for complex queries (PostgreSQL 11+)
+ALTER DATABASE postgres SET jit = on;
+
+-- ============================================================================
+-- MAINTENANCE JOBS
+-- ============================================================================
+
+-- Function: Refresh all materialized views
+CREATE OR REPLACE FUNCTION refresh_all_materialized_views()
+RETURNS void AS $$
+BEGIN
+    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_schema_stats_by_namespace;
+    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_popular_schemas;
+    REFRESH MATERIALIZED VIEW CONCURRENTLY mv_compatibility_matrix;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Clean up old validation results (cache cleanup)
+CREATE OR REPLACE FUNCTION cleanup_old_validation_results()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM validation_results
+    WHERE validated_at < NOW() - INTERVAL '30 days';
+
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Function: Vacuum and analyze all tables
+CREATE OR REPLACE FUNCTION maintenance_vacuum_analyze()
+RETURNS void AS $$
+BEGIN
+    VACUUM ANALYZE schemas;
+    VACUUM ANALYZE compatibility_checks;
+    VACUUM ANALYZE validation_results;
+    VACUUM ANALYZE schema_events;
+    VACUUM ANALYZE schema_dependencies;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- STATISTICS COLLECTION
+-- ============================================================================
+
+-- Update statistics targets for better query planning
+ALTER TABLE schemas ALTER COLUMN namespace SET STATISTICS 1000;
+ALTER TABLE schemas ALTER COLUMN name SET STATISTICS 1000;
+ALTER TABLE schemas ALTER COLUMN state SET STATISTICS 100;
+ALTER TABLE schemas ALTER COLUMN format SET STATISTICS 100;
+ALTER TABLE schemas ALTER COLUMN metadata SET STATISTICS 500;
+
+-- Collect statistics
+ANALYZE schemas;
+ANALYZE compatibility_checks;
+ANALYZE validation_results;
+ANALYZE schema_events;
+ANALYZE schema_dependencies;
+
+-- ============================================================================
+-- PREPARED STATEMENTS (Examples)
+-- ============================================================================
+
+-- Note: Prepared statements are typically created at runtime by the application
+-- These are examples of what the application should prepare
+
+-- PREPARE get_schema_by_key (VARCHAR, VARCHAR, INT, INT, INT) AS
+--   SELECT id, format, content, content_hash, state, created_at, updated_at, metadata
+--   FROM schemas
+--   WHERE namespace = $1 AND name = $2
+--     AND version_major = $3 AND version_minor = $4 AND version_patch = $5
+--     AND state IN ('ACTIVE', 'DEPRECATED')
+--   LIMIT 1;
+
+-- PREPARE get_schema_by_id (UUID) AS
+--   SELECT id, namespace, name, version_major, version_minor, version_patch,
+--          format, content, content_hash, state, created_at, updated_at, metadata
+--   FROM schemas
+--   WHERE id = $1 AND state IN ('ACTIVE', 'DEPRECATED')
+--   LIMIT 1;
+
+-- PREPARE list_schemas_by_namespace (VARCHAR, INT, INT) AS
+--   SELECT id, name, version_major, version_minor, version_patch, state, created_at
+--   FROM schemas
+--   WHERE namespace = $1 AND state = 'ACTIVE'
+--   ORDER BY name, version_major DESC, version_minor DESC, version_patch DESC
+--   LIMIT $2 OFFSET $3;
+
+-- ============================================================================
+-- MONITORING QUERIES
+-- ============================================================================
+
+-- Create view for index usage monitoring
+CREATE OR REPLACE VIEW v_index_usage_stats AS
+SELECT
+    schemaname,
+    tablename,
+    indexname,
+    idx_scan as scans,
+    idx_tup_read as tuples_read,
+    idx_tup_fetch as tuples_fetched,
+    pg_size_pretty(pg_relation_size(indexrelid)) as index_size
+FROM pg_stat_user_indexes
+WHERE schemaname = 'public'
+ORDER BY idx_scan DESC;
+
+-- Create view for table statistics
+CREATE OR REPLACE VIEW v_table_stats AS
+SELECT
+    schemaname,
+    tablename,
+    seq_scan as sequential_scans,
+    seq_tup_read as sequential_tuples_read,
+    idx_scan as index_scans,
+    idx_tup_fetch as index_tuples_fetched,
+    n_tup_ins as inserts,
+    n_tup_upd as updates,
+    n_tup_del as deletes,
+    n_live_tup as live_tuples,
+    n_dead_tup as dead_tuples,
+    pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as total_size
+FROM pg_stat_user_tables
+WHERE schemaname = 'public'
+ORDER BY pg_total_relation_size(schemaname||'.'||tablename) DESC;
+
+-- Create view for slow query identification (requires pg_stat_statements extension)
+-- CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
+--
+-- CREATE OR REPLACE VIEW v_slow_queries AS
+-- SELECT
+--     query,
+--     calls,
+--     total_time,
+--     mean_time,
+--     max_time,
+--     stddev_time,
+--     rows
+-- FROM pg_stat_statements
+-- WHERE mean_time > 10 -- queries with average time > 10ms
+-- ORDER BY mean_time DESC
+-- LIMIT 50;
+
+-- ============================================================================
+-- COMMENTS AND DOCUMENTATION
+-- ============================================================================
+
+COMMENT ON INDEX idx_schemas_lookup_covering IS 'Covering index for the most common schema lookup pattern (namespace, name, version)';
+COMMENT ON INDEX idx_schemas_latest_version IS 'Optimized index for fetching the latest version of a schema';
+COMMENT ON INDEX idx_schemas_content_hash_covering IS 'Covering index for content-based deduplication';
+COMMENT ON INDEX idx_schemas_recent_hot IS 'Partial index for hot data (recent active schemas)';
+COMMENT ON MATERIALIZED VIEW mv_popular_schemas IS 'Top 100 most accessed schemas in the last 7 days (refreshed hourly for cache warming)';
+COMMENT ON FUNCTION get_latest_schema_version IS 'Optimized function to get the latest ACTIVE version of a schema';
+COMMENT ON FUNCTION refresh_all_materialized_views IS 'Refresh all materialized views (should be called via cron every hour)';
+COMMENT ON FUNCTION cleanup_old_validation_results IS 'Remove validation results older than 30 days (should be called daily)';
+
+-- ============================================================================
+-- MIGRATION COMPLETE
+-- ============================================================================
+
+-- Output migration summary
+DO $$
+DECLARE
+    index_count INT;
+    mv_count INT;
+BEGIN
+    SELECT COUNT(*) INTO index_count
+    FROM pg_indexes
+    WHERE schemaname = 'public';
+
+    SELECT COUNT(*) INTO mv_count
+    FROM pg_matviews
+    WHERE schemaname = 'public';
+
+    RAISE NOTICE 'Performance optimization migration complete!';
+    RAISE NOTICE 'Total indexes: %', index_count;
+    RAISE NOTICE 'Total materialized views: %', mv_count;
+    RAISE NOTICE 'Run ANALYZE to update query planner statistics';
+END $$;

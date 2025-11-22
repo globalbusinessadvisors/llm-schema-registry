@@ -1,0 +1,256 @@
+//! Custom validation rules example
+//!
+//! Run with: cargo run --example custom_rules
+
+use anyhow::Result;
+use schema_registry_validation::{
+    SchemaFormat, Severity, ValidationEngine, ValidationError, ValidationRule,
+};
+use std::sync::Arc;
+
+/// A custom rule that enforces company-specific standards
+struct CompanyStandardsRule;
+
+impl ValidationRule for CompanyStandardsRule {
+    fn name(&self) -> &str {
+        "company-standards"
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn validate(&self, schema: &str, _format: SchemaFormat) -> Result<Vec<ValidationError>> {
+        let mut errors = Vec::new();
+
+        // Rule 1: All schemas must have a version field
+        if !schema.contains("version") && !schema.contains("$id") {
+            errors.push(
+                ValidationError::new(
+                    self.name(),
+                    "Schema should include version information",
+                )
+                .with_suggestion("Add a 'version' field or '$id' with version"),
+            );
+        }
+
+        // Rule 2: Check for company namespace
+        if !schema.contains("example.com") && !schema.contains("com.example") {
+            errors.push(
+                ValidationError::new(
+                    self.name(),
+                    "Schema should use company namespace (example.com)",
+                )
+                .with_suggestion("Add namespace: 'example.com' or 'com.example'"),
+            );
+        }
+
+        Ok(errors)
+    }
+}
+
+/// A custom rule that enforces PII data handling
+struct PIIDataRule;
+
+impl ValidationRule for PIIDataRule {
+    fn name(&self) -> &str {
+        "pii-data-handling"
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+
+    fn validate(&self, schema: &str, _format: SchemaFormat) -> Result<Vec<ValidationError>> {
+        let mut errors = Vec::new();
+
+        // Check for PII fields
+        let pii_fields = ["ssn", "social_security", "credit_card", "password"];
+
+        for field in &pii_fields {
+            if schema.to_lowercase().contains(field) {
+                // Check if there's encryption or masking metadata
+                if !schema.contains("encrypted") && !schema.contains("pii_category") {
+                    errors.push(
+                        ValidationError::new(
+                            self.name(),
+                            format!("PII field '{}' detected without protection metadata", field),
+                        )
+                        .with_suggestion(
+                            "Add metadata indicating encryption or data handling policy",
+                        )
+                        .with_context("field", field.to_string()),
+                    );
+                }
+            }
+        }
+
+        Ok(errors)
+    }
+}
+
+/// A custom rule that enforces documentation standards
+struct DocumentationRule;
+
+impl ValidationRule for DocumentationRule {
+    fn name(&self) -> &str {
+        "documentation-standards"
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Warning
+    }
+
+    fn validate(&self, schema: &str, format: SchemaFormat) -> Result<Vec<ValidationError>> {
+        let mut errors = Vec::new();
+
+        match format {
+            SchemaFormat::JsonSchema => {
+                // Parse as JSON
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(schema) {
+                    // Check for title
+                    if json.get("title").is_none() {
+                        errors.push(ValidationError::new(
+                            self.name(),
+                            "Schema should have a 'title' field",
+                        ));
+                    }
+
+                    // Check for examples
+                    if json.get("examples").is_none() {
+                        errors.push(
+                            ValidationError::new(
+                                self.name(),
+                                "Schema should include usage examples",
+                            )
+                            .with_suggestion("Add an 'examples' array with sample data"),
+                        );
+                    }
+                }
+            }
+            SchemaFormat::Avro => {
+                // Check for doc fields
+                if !schema.contains("\"doc\"") {
+                    errors.push(ValidationError::new(
+                        self.name(),
+                        "Avro schema should include 'doc' fields",
+                    ));
+                }
+            }
+            _ => {}
+        }
+
+        Ok(errors)
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    println!("=== Custom Validation Rules Example ===\n");
+
+    // Create engine with custom rules
+    let mut engine = ValidationEngine::new();
+
+    // Add custom rules
+    engine.add_rule(Arc::new(CompanyStandardsRule));
+    engine.add_rule(Arc::new(PIIDataRule));
+    engine.add_rule(Arc::new(DocumentationRule));
+
+    println!("Added 3 custom validation rules:");
+    println!("  1. Company Standards Rule");
+    println!("  2. PII Data Handling Rule");
+    println!("  3. Documentation Standards Rule");
+    println!();
+
+    // Test schema without company standards
+    println!("Test 1: Schema without company standards");
+    let schema1 = r#"{
+        "type": "object",
+        "description": "Test schema",
+        "properties": {
+            "name": {"type": "string"}
+        }
+    }"#;
+
+    let result = engine.validate(schema1, SchemaFormat::JsonSchema).await?;
+
+    println!("  Errors: {}", result.error_count());
+    println!("  Warnings: {}", result.warning_count());
+
+    for warning in &result.warnings {
+        if warning.rule == "company-standards" || warning.rule == "documentation-standards" {
+            println!("    - {}", warning.message);
+            if let Some(suggestion) = &warning.suggestion {
+                println!("      → {}", suggestion);
+            }
+        }
+    }
+    println!();
+
+    // Test schema with PII field
+    println!("Test 2: Schema with PII field (no protection metadata)");
+    let schema2 = r#"{
+        "type": "object",
+        "description": "User schema",
+        "properties": {
+            "ssn": {"type": "string"},
+            "name": {"type": "string"}
+        }
+    }"#;
+
+    let result = engine.validate(schema2, SchemaFormat::JsonSchema).await?;
+
+    println!("  Errors: {}", result.error_count());
+
+    for error in &result.errors {
+        if error.rule == "pii-data-handling" {
+            println!("    - {}", error.message);
+            if let Some(suggestion) = &error.suggestion {
+                println!("      → {}", suggestion);
+            }
+        }
+    }
+    println!();
+
+    // Test compliant schema
+    println!("Test 3: Compliant schema with all metadata");
+    let schema3 = r#"{
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "$id": "https://example.com/schemas/user/v1.0.0",
+        "version": "1.0.0",
+        "title": "User Schema",
+        "description": "Schema for user data",
+        "type": "object",
+        "properties": {
+            "id": {
+                "type": "integer",
+                "description": "User ID"
+            },
+            "name": {
+                "type": "string",
+                "description": "User name"
+            }
+        },
+        "examples": [
+            {
+                "id": 1,
+                "name": "John Doe"
+            }
+        ]
+    }"#;
+
+    let result = engine.validate(schema3, SchemaFormat::JsonSchema).await?;
+
+    println!("  Valid: {}", result.is_valid);
+    println!("  Errors: {}", result.error_count());
+    println!("  Warnings: {}", result.warning_count());
+
+    if result.is_valid {
+        println!("  ✓ Schema passes all custom validation rules!");
+    }
+    println!();
+
+    println!("=== Example Complete ===");
+
+    Ok(())
+}

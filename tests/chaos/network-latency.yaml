@@ -1,0 +1,23 @@
+# Chaos Mesh: Network Latency Injection
+# Adds latency to network calls to test degraded performance handling
+
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: schema-registry-network-latency
+  namespace: schema-registry
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces:
+      - schema-registry
+    labelSelectors:
+      app: schema-registry
+  delay:
+    latency: '100ms'
+    correlation: '25'
+    jitter: '50ms'
+  duration: '5m'
+  scheduler:
+    cron: '@every 30m'

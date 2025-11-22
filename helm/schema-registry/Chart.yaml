@@ -1,0 +1,29 @@
+apiVersion: v2
+name: schema-registry
+description: A Helm chart for LLM Schema Registry - Enterprise-grade schema management for LLM applications
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+keywords:
+  - schema-registry
+  - llm
+  - rust
+  - api
+  - microservices
+
+home: https://github.com/llm-schema-registry/llm-schema-registry
+sources:
+  - https://github.com/llm-schema-registry/llm-schema-registry
+
+maintainers:
+  - name: LLM Schema Registry Team
+    email: team@schema-registry.example.com
+
+icon: https://raw.githubusercontent.com/llm-schema-registry/llm-schema-registry/main/docs/logo.png
+
+annotations:
+  category: Infrastructure
+  licenses: Apache-2.0
+
+dependencies: []

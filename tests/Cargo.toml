@@ -1,0 +1,80 @@
+[package]
+name = "schema-registry-integration-tests"
+version.workspace = true
+edition.workspace = true
+
+[dev-dependencies]
+# Internal crates
+schema-registry-core = { workspace = true }
+schema-registry-api = { workspace = true }
+schema-registry-storage = { workspace = true }
+schema-registry-validation = { workspace = true }
+schema-registry-compatibility = { workspace = true }
+schema-registry-security = { workspace = true }
+schema-registry-observability = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+async-trait = { workspace = true }
+futures = { workspace = true }
+
+# Web framework
+axum = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+hyper = { workspace = true }
+
+# Testcontainers
+testcontainers = "0.21"
+testcontainers-modules = { version = "0.9", features = ["postgres", "redis", "localstack"] }
+
+# Database
+sqlx = { workspace = true }
+redis = { workspace = true }
+
+# Cloud storage
+aws-sdk-s3 = { workspace = true }
+aws-config = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Testing utilities
+proptest = { workspace = true }
+mockall = { workspace = true }
+criterion = { workspace = true }
+wiremock = "0.6"
+tempfile = "3.8"
+ctor = "0.2"
+bytes = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+url = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[test]]
+name = "integration"
+path = "integration/mod.rs"
+harness = true
+
+[[test]]
+name = "e2e"
+path = "e2e/mod.rs"
+harness = true
+
+[[test]]
+name = "property"
+path = "property/mod.rs"
+harness = true

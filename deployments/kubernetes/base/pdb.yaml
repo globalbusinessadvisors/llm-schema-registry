@@ -1,0 +1,15 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: schema-registry-pdb
+  namespace: schema-registry
+  labels:
+    app.kubernetes.io/name: schema-registry
+    app.kubernetes.io/component: availability
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: schema-registry
+      app.kubernetes.io/component: server
+  unhealthyPodEvictionPolicy: IfHealthyBudget

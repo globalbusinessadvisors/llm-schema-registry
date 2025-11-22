@@ -1,0 +1,129 @@
+================================================================================
+  LLM Schema Registry has been deployed!
+================================================================================
+
+Chart Version: {{ .Chart.Version }}
+App Version: {{ .Chart.AppVersion }}
+Release: {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+--------------------------------------------------------------------------------
+SERVICE ENDPOINTS
+--------------------------------------------------------------------------------
+
+{{- if .Values.ingress.enabled }}
+HTTP API:
+{{- range .Values.ingress.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- else if contains "LoadBalancer" .Values.service.type }}
+HTTP API:
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+
+  Get the LoadBalancer IP:
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "schema-registry.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+
+  Access the API:
+  curl http://$SERVICE_IP/health
+{{- else if contains "ClusterIP" .Values.service.type }}
+HTTP API (via port-forward):
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "schema-registry.fullname" . }} 8080:80
+  curl http://localhost:8080/health
+{{- end }}
+
+{{- if .Values.grpcIngress.enabled }}
+gRPC API:
+{{- range .Values.grpcIngress.hosts }}
+  grpcs://{{ .host }}:443
+{{- end }}
+{{- else }}
+gRPC API (via port-forward):
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "schema-registry.fullname" . }} 9090:9090
+{{- end }}
+
+{{- if .Values.metrics.enabled }}
+Metrics:
+  kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "schema-registry.fullname" . }}-metrics 9091:9091
+  curl http://localhost:9091/metrics
+{{- end }}
+
+--------------------------------------------------------------------------------
+QUICK START
+--------------------------------------------------------------------------------
+
+1. Check the deployment status:
+   kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "schema-registry.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+2. View logs:
+   kubectl logs --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "schema-registry.name" . }}" --tail=100 -f
+
+3. Register a schema (via port-forward):
+   kubectl port-forward --namespace {{ .Release.Namespace }} svc/{{ include "schema-registry.fullname" . }} 8080:80
+
+   curl -X POST http://localhost:8080/subjects/test-subject/versions \
+     -H "Content-Type: application/json" \
+     -d '{"schema": "{\"type\":\"record\",\"name\":\"Test\",\"fields\":[{\"name\":\"field1\",\"type\":\"string\"}]}"}'
+
+4. Retrieve schemas:
+   curl http://localhost:8080/schemas/ids/1
+
+--------------------------------------------------------------------------------
+CONFIGURATION
+--------------------------------------------------------------------------------
+
+PostgreSQL:
+{{- if .Values.postgresql.enabled }}
+  Internal PostgreSQL deployed
+  Database: {{ .Values.postgresql.auth.database }}
+{{- else if .Values.externalDatabase.enabled }}
+  External database configured
+  Host: {{ .Values.externalDatabase.host }}:{{ .Values.externalDatabase.port }}
+{{- end }}
+
+Redis:
+{{- if .Values.redis.enabled }}
+  Internal Redis deployed
+{{- else if .Values.externalRedis.enabled }}
+  External Redis configured
+  Host: {{ .Values.externalRedis.host }}:{{ .Values.externalRedis.port }}
+{{- end }}
+
+{{- if .Values.autoscaling.enabled }}
+Autoscaling:
+  Min Replicas: {{ .Values.autoscaling.minReplicas }}
+  Max Replicas: {{ .Values.autoscaling.maxReplicas }}
+  CPU Target: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}%
+  Memory Target: {{ .Values.autoscaling.targetMemoryUtilizationPercentage }}%
+{{- else }}
+Replicas: {{ .Values.replicaCount }} (static)
+{{- end }}
+
+--------------------------------------------------------------------------------
+IMPORTANT NOTES
+--------------------------------------------------------------------------------
+
+{{- if not .Values.security.existingSecret }}
+WARNING: You are using default secrets!
+
+  For production deployments:
+  1. Generate secure secrets:
+     kubectl create secret generic {{ include "schema-registry.fullname" . }}-custom \
+       --from-literal=JWT_SECRET=$(openssl rand -base64 32) \
+       --from-literal=DATABASE_URL=postgresql://... \
+       --namespace {{ .Release.Namespace }}
+
+  2. Update values:
+     helm upgrade {{ .Release.Name }} schema-registry \
+       --set security.existingSecret={{ include "schema-registry.fullname" . }}-custom
+{{- end }}
+
+{{- if not .Values.ingress.tls }}
+WARNING: TLS is not enabled!
+  Consider enabling TLS/HTTPS for production deployments.
+{{- end }}
+
+For more information:
+  Documentation: https://github.com/llm-schema-registry/llm-schema-registry
+  Issues: https://github.com/llm-schema-registry/llm-schema-registry/issues
+
+Happy schema managing!

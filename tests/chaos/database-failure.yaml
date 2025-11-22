@@ -1,0 +1,21 @@
+# Chaos Mesh: Database Connection Failure
+# Simulates PostgreSQL connectivity issues
+
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: schema-registry-database-failure
+  namespace: schema-registry
+spec:
+  action: loss
+  mode: one
+  selector:
+    namespaces:
+      - schema-registry
+    labelSelectors:
+      app: postgres
+  loss:
+    loss: '50'  # 50% packet loss
+    correlation: '25'
+  duration: '1m'
+  # Manual trigger only

@@ -1,0 +1,293 @@
+version: '3.9'
+
+# ============================================================================
+# Docker Compose Configuration for LLM Schema Registry
+# Production-ready local development and testing environment
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # PostgreSQL - Primary metadata storage
+  # ==========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: schema-registry-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: schema_registry
+      POSTGRES_USER: schema_registry
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schema_registry_dev}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U schema_registry -d schema_registry"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - schema-registry-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ==========================================================================
+  # Redis - Caching layer
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: schema-registry-redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --tcp-backlog 511
+      --timeout 0
+      --tcp-keepalive 300
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    networks:
+      - schema-registry-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ==========================================================================
+  # LocalStack - S3 emulation for local development
+  # ==========================================================================
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: schema-registry-localstack
+    restart: unless-stopped
+    environment:
+      SERVICES: s3
+      DEBUG: 0
+      DATA_DIR: /tmp/localstack/data
+      EDGE_PORT: 4566
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/tmp/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - schema-registry-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ==========================================================================
+  # Schema Registry Server - Main application
+  # ==========================================================================
+  schema-registry:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime-server
+      cache_from:
+        - schema-registry:latest
+    image: schema-registry:latest
+    container_name: schema-registry-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    environment:
+      # Server configuration
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      GRPC_PORT: 9090
+      METRICS_PORT: 9091
+
+      # Database configuration
+      DATABASE_URL: postgresql://schema_registry:${POSTGRES_PASSWORD:-schema_registry_dev}@postgres:5432/schema_registry
+      DATABASE_MAX_CONNECTIONS: 20
+      DATABASE_MIN_CONNECTIONS: 5
+      DATABASE_ACQUIRE_TIMEOUT: 30
+
+      # Redis configuration
+      REDIS_URL: redis://redis:6379
+      REDIS_POOL_SIZE: 10
+      REDIS_TIMEOUT: 5
+      CACHE_TTL: 3600
+      CACHE_MAX_SIZE: 10000
+
+      # S3 configuration (LocalStack)
+      S3_ENDPOINT: http://localstack:4566
+      S3_REGION: us-east-1
+      S3_BUCKET: schema-registry-artifacts
+      S3_ACCESS_KEY_ID: test
+      S3_SECRET_ACCESS_KEY: test
+      S3_PATH_STYLE: "true"
+
+      # Application configuration
+      RUST_LOG: info,schema_registry=debug
+      RUST_BACKTRACE: 1
+      LOG_FORMAT: json
+
+      # Security
+      JWT_SECRET: ${JWT_SECRET:-dev_secret_change_in_production}
+      API_KEY_HEADER: X-API-Key
+
+      # Features
+      ENABLE_GRPC: "true"
+      ENABLE_METRICS: "true"
+      ENABLE_CORS: "true"
+
+      # Performance
+      MAX_SCHEMA_SIZE: 1048576
+      REQUEST_TIMEOUT: 30
+      GRACEFUL_SHUTDOWN_TIMEOUT: 10
+    ports:
+      - "8080:8080"   # REST API
+      - "9090:9090"   # gRPC API
+      - "9091:9091"   # Metrics
+    volumes:
+      - ./config:/config:ro
+      - schema_data:/data
+    healthcheck:
+      test: ["CMD", "/app/schema-registry-server", "health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - schema-registry-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s
+
+  # ==========================================================================
+  # Prometheus - Metrics collection (optional)
+  # ==========================================================================
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: schema-registry-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--storage.tsdb.retention.time=7d'
+    ports:
+      - "9092:9090"
+    volumes:
+      - ./deployments/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - schema-registry-network
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+
+  # ==========================================================================
+  # Grafana - Metrics visualization (optional)
+  # ==========================================================================
+  grafana:
+    image: grafana/grafana:10.2.2
+    container_name: schema-registry-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deployments/monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./deployments/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - schema-registry-network
+    profiles:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  schema-registry-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  localstack_data:
+    driver: local
+  schema_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local

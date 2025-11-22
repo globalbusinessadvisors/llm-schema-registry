@@ -1,0 +1,189 @@
+//! Basic validation example
+//!
+//! Run with: cargo run --example basic_validation
+
+use schema_registry_validation::{SchemaFormat, ValidationEngine};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    println!("=== Basic Schema Validation Example ===\n");
+
+    let engine = ValidationEngine::new();
+
+    // Example 1: Valid JSON Schema
+    println!("1. Validating a valid JSON Schema...");
+    let valid_schema = r#"{
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "description": "A user profile schema",
+        "properties": {
+            "id": {
+                "type": "integer",
+                "description": "Unique user identifier"
+            },
+            "name": {
+                "type": "string",
+                "description": "User's full name",
+                "minLength": 1,
+                "maxLength": 100
+            },
+            "email": {
+                "type": "string",
+                "description": "User's email address",
+                "format": "email",
+                "examples": ["user@example.com"]
+            },
+            "age": {
+                "type": "integer",
+                "description": "User's age",
+                "minimum": 0,
+                "maximum": 150
+            }
+        },
+        "required": ["id", "name", "email"]
+    }"#;
+
+    let result = engine
+        .validate(valid_schema, SchemaFormat::JsonSchema)
+        .await?;
+
+    println!("  Valid: {}", result.is_valid);
+    println!("  Errors: {}", result.error_count());
+    println!("  Warnings: {}", result.warning_count());
+    println!(
+        "  Validation time: {:?}",
+        result.metrics.duration
+    );
+    println!();
+
+    // Example 2: Invalid JSON Schema (conflicting constraints)
+    println!("2. Validating an invalid JSON Schema (conflicting constraints)...");
+    let invalid_schema = r#"{
+        "type": "object",
+        "properties": {
+            "value": {
+                "type": "number",
+                "minimum": 100,
+                "maximum": 50
+            }
+        }
+    }"#;
+
+    let result = engine
+        .validate(invalid_schema, SchemaFormat::JsonSchema)
+        .await?;
+
+    println!("  Valid: {}", result.is_valid);
+    println!("  Errors:");
+    for error in &result.errors {
+        println!("    - [{}] {}", error.rule, error.message);
+        if let Some(suggestion) = &error.suggestion {
+            println!("      Suggestion: {}", suggestion);
+        }
+    }
+    println!();
+
+    // Example 3: Schema with warnings (LLM-specific)
+    println!("3. Validating a schema with LLM warnings...");
+    let schema_with_warnings = r#"{
+        "type": "object",
+        "properties": {
+            "field1": {"type": "string"},
+            "field2": {"type": "number"}
+        }
+    }"#;
+
+    let result = engine
+        .validate(schema_with_warnings, SchemaFormat::JsonSchema)
+        .await?;
+
+    println!("  Valid: {}", result.is_valid);
+    println!("  Warnings:");
+    for warning in &result.warnings {
+        println!("    - [{}] {}", warning.rule, warning.message);
+        if let Some(suggestion) = &warning.suggestion {
+            println!("      Suggestion: {}", suggestion);
+        }
+    }
+    println!();
+
+    // Example 4: Avro Schema
+    println!("4. Validating an Avro schema...");
+    let avro_schema = r#"{
+        "type": "record",
+        "name": "User",
+        "namespace": "com.example",
+        "doc": "User record for demonstration",
+        "fields": [
+            {
+                "name": "id",
+                "type": "long",
+                "doc": "User identifier"
+            },
+            {
+                "name": "username",
+                "type": "string",
+                "doc": "Username for login"
+            },
+            {
+                "name": "email",
+                "type": "string",
+                "doc": "Email address"
+            },
+            {
+                "name": "status",
+                "type": {
+                    "type": "enum",
+                    "name": "UserStatus",
+                    "symbols": ["ACTIVE", "INACTIVE", "SUSPENDED"]
+                },
+                "doc": "User account status"
+            }
+        ]
+    }"#;
+
+    let result = engine.validate(avro_schema, SchemaFormat::Avro).await?;
+
+    println!("  Valid: {}", result.is_valid);
+    println!("  Errors: {}", result.error_count());
+    println!("  Warnings: {}", result.warning_count());
+    println!(
+        "  Fields validated: {}",
+        result.metrics.fields_validated
+    );
+    println!();
+
+    // Example 5: Protocol Buffers
+    println!("5. Validating a Protocol Buffers schema...");
+    let protobuf_schema = r#"
+syntax = "proto3";
+
+package example;
+
+message User {
+  int64 id = 1;
+  string username = 2;
+  string email = 3;
+  UserStatus status = 4;
+}
+
+enum UserStatus {
+  ACTIVE = 0;
+  INACTIVE = 1;
+  SUSPENDED = 2;
+}
+"#;
+
+    let result = engine
+        .validate(protobuf_schema, SchemaFormat::Protobuf)
+        .await?;
+
+    println!("  Valid: {}", result.is_valid);
+    println!("  Errors: {}", result.error_count());
+    println!("  Warnings: {}", result.warning_count());
+    println!();
+
+    println!("=== Example Complete ===");
+
+    Ok(())
+}

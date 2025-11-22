@@ -1,0 +1,19 @@
+# Chaos Mesh: Network Partition
+# Simulates network split to test distributed system resilience
+
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: schema-registry-network-partition
+  namespace: schema-registry
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - schema-registry
+    labelSelectors:
+      app: schema-registry
+  direction: both
+  duration: '2m'
+  # Manual trigger only - don't run automatically

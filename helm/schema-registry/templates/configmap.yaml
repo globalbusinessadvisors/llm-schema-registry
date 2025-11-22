@@ -1,0 +1,55 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "schema-registry.fullname" . }}
+  labels:
+    {{- include "schema-registry.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+data:
+  # Server configuration
+  SERVER_HOST: {{ .Values.config.server.host | quote }}
+  SERVER_PORT: {{ .Values.config.server.port | quote }}
+  GRPC_PORT: {{ .Values.config.server.grpcPort | quote }}
+  METRICS_PORT: {{ .Values.config.server.metricsPort | quote }}
+
+  # Database configuration
+  {{- if .Values.externalDatabase.enabled }}
+  DATABASE_MAX_CONNECTIONS: {{ .Values.externalDatabase.maxConnections | quote }}
+  DATABASE_MIN_CONNECTIONS: {{ .Values.externalDatabase.minConnections | quote }}
+  DATABASE_ACQUIRE_TIMEOUT: {{ .Values.externalDatabase.acquireTimeout | quote }}
+  {{- end }}
+
+  # Redis configuration
+  {{- if .Values.externalRedis.enabled }}
+  REDIS_POOL_SIZE: {{ .Values.externalRedis.poolSize | quote }}
+  REDIS_TIMEOUT: {{ .Values.externalRedis.timeout | quote }}
+  {{- end }}
+
+  # Cache configuration
+  CACHE_TTL: {{ .Values.config.cache.ttl | quote }}
+  CACHE_MAX_SIZE: {{ .Values.config.cache.maxSize | quote }}
+
+  # S3 configuration
+  {{- if .Values.s3.enabled }}
+  {{- if .Values.s3.endpoint }}
+  S3_ENDPOINT: {{ .Values.s3.endpoint | quote }}
+  {{- end }}
+  S3_REGION: {{ .Values.s3.region | quote }}
+  S3_BUCKET: {{ .Values.s3.bucket | quote }}
+  S3_PATH_STYLE: {{ .Values.s3.pathStyle | quote }}
+  {{- end }}
+
+  # Logging configuration
+  RUST_LOG: {{ .Values.config.logging.level | quote }}
+  RUST_BACKTRACE: {{ .Values.config.logging.backtrace | quote }}
+  LOG_FORMAT: {{ .Values.config.logging.format | quote }}
+
+  # Features
+  ENABLE_GRPC: {{ .Values.config.features.enableGrpc | quote }}
+  ENABLE_METRICS: {{ .Values.config.features.enableMetrics | quote }}
+  ENABLE_CORS: {{ .Values.config.features.enableCors | quote }}
+
+  # Performance
+  MAX_SCHEMA_SIZE: {{ .Values.config.performance.maxSchemaSize | quote }}
+  REQUEST_TIMEOUT: {{ .Values.config.performance.requestTimeout | quote }}
+  GRACEFUL_SHUTDOWN_TIMEOUT: {{ .Values.config.performance.gracefulShutdownTimeout | quote }}

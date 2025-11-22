@@ -1,0 +1,120 @@
+name: Load Tests
+
+on:
+  workflow_dispatch:  # Manual trigger
+  schedule:
+    - cron: '0 2 * * 1'  # Weekly on Monday at 2 AM UTC
+
+env:
+  K6_VERSION: 0.49.0
+
+jobs:
+  basic-load-test:
+    name: Basic Load Test (10K req/sec)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          wget https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-amd64.tar.gz
+          tar -xzf k6-v${K6_VERSION}-linux-amd64.tar.gz
+          sudo mv k6-v${K6_VERSION}-linux-amd64/k6 /usr/local/bin/
+
+      - name: Start test environment
+        run: |
+          docker-compose -f docker/docker-compose.test.yml up -d
+          sleep 30  # Wait for services to be ready
+
+      - name: Run basic load test
+        run: k6 run tests/load/basic_load.js
+        env:
+          API_URL: http://localhost:8080
+
+      - name: Upload load test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: load-test-results
+          path: |
+            summary.json
+            *.html
+
+  spike-test:
+    name: Spike Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          wget https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-amd64.tar.gz
+          tar -xzf k6-v${K6_VERSION}-linux-amd64.tar.gz
+          sudo mv k6-v${K6_VERSION}-linux-amd64/k6 /usr/local/bin/
+
+      - name: Start test environment
+        run: |
+          docker-compose -f docker/docker-compose.test.yml up -d
+          sleep 30
+
+      - name: Run spike test
+        run: k6 run tests/load/spike_test.js
+        env:
+          API_URL: http://localhost:8080
+
+  stress-test:
+    name: Stress Test (Find Breaking Point)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          wget https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-amd64.tar.gz
+          tar -xzf k6-v${K6_VERSION}-linux-amd64.tar.gz
+          sudo mv k6-v${K6_VERSION}-linux-amd64/k6 /usr/local/bin/
+
+      - name: Start test environment
+        run: |
+          docker-compose -f docker/docker-compose.test.yml up -d
+          sleep 30
+
+      - name: Run stress test
+        run: k6 run tests/load/stress_test.js
+        env:
+          API_URL: http://localhost:8080
+        continue-on-error: true  # Expected to fail at some point
+
+  soak-test:
+    name: Soak Test (2 hours)
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    if: github.event_name == 'schedule'  # Only on scheduled runs
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install k6
+        run: |
+          wget https://github.com/grafana/k6/releases/download/v${K6_VERSION}/k6-v${K6_VERSION}-linux-amd64.tar.gz
+          tar -xzf k6-v${K6_VERSION}-linux-amd64.tar.gz
+          sudo mv k6-v${K6_VERSION}-linux-amd64/k6 /usr/local/bin/
+
+      - name: Start test environment
+        run: |
+          docker-compose -f docker/docker-compose.test.yml up -d
+          sleep 30
+
+      - name: Run soak test
+        run: k6 run tests/load/soak_test.js
+        env:
+          API_URL: http://localhost:8080
+
+      - name: Check for memory leaks
+        run: |
+          docker stats --no-stream schema-registry

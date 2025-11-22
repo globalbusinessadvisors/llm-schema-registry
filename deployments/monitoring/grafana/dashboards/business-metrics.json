@@ -1,0 +1,200 @@
+{
+  "dashboard": {
+    "title": "Schema Registry - Business Metrics",
+    "description": "Business KPIs and operational metrics for Schema Registry",
+    "tags": ["schema-registry", "business", "kpi"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "1m",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Schemas Registered (Rate)",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(rate(schema_registry_schemas_registered_total[5m])) by (format)",
+            "legendFormat": "{{format}}",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Registrations/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 2,
+        "title": "Total Active Schemas",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(schema_registry_schemas_active_total)",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "colorMode": "value",
+          "graphMode": "area",
+          "justifyMode": "auto",
+          "orientation": "auto"
+        }
+      },
+      {
+        "id": 3,
+        "title": "Schema Formats Distribution",
+        "type": "piechart",
+        "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "sum(schema_registry_schemas_active_total) by (format)",
+            "legendFormat": "{{format}}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Validation Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(schema_registry_validations_total{result=\"success\"}[5m])) by (format)",
+            "legendFormat": "Success - {{format}}",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(schema_registry_validations_total{result=\"failure\"}[5m])) by (format)",
+            "legendFormat": "Failure - {{format}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Validations/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 5,
+        "title": "Validation Success Rate (%)",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "sum(rate(schema_registry_validations_total{result=\"success\"}[5m])) / sum(rate(schema_registry_validations_total[5m])) * 100",
+            "refId": "A"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 90},
+                {"color": "green", "value": 95}
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Compatibility Checks",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "sum(rate(schema_registry_compatibility_checks_total{result=\"compatible\"}[5m])) by (mode)",
+            "legendFormat": "Compatible - {{mode}}",
+            "refId": "A"
+          },
+          {
+            "expr": "sum(rate(schema_registry_compatibility_checks_total{result=\"incompatible\"}[5m])) by (mode)",
+            "legendFormat": "Incompatible - {{mode}}",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [
+          {"format": "ops", "label": "Checks/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Cache Hit Rate",
+        "type": "gauge",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "schema_registry_cache_hit_rate{tier=\"L1\"} * 100",
+            "legendFormat": "L1 Cache",
+            "refId": "A"
+          },
+          {
+            "expr": "schema_registry_cache_hit_rate{tier=\"L2\"} * 100",
+            "legendFormat": "L2 Cache",
+            "refId": "B"
+          }
+        ],
+        "options": {
+          "showThresholdLabels": false,
+          "showThresholdMarkers": true
+        },
+        "fieldConfig": {
+          "defaults": {
+            "max": 100,
+            "min": 0,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 70},
+                {"color": "green", "value": 90}
+              ]
+            },
+            "unit": "percent"
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Top Schemas by Access",
+        "type": "table",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "topk(10, sum(rate(schema_registry_cache_operations_total{operation=\"get\", result=\"hit\"}[5m])) by (schema_id))",
+            "format": "table",
+            "instant": true,
+            "refId": "A"
+          }
+        ],
+        "transformations": [
+          {
+            "id": "organize",
+            "options": {
+              "excludeByName": {"Time": true},
+              "indexByName": {},
+              "renameByName": {
+                "Value": "Access Rate",
+                "schema_id": "Schema ID"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

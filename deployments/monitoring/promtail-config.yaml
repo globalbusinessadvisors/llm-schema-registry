@@ -1,0 +1,91 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  # Scrape Docker container logs
+  - job_name: docker
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: docker
+          __path__: /var/lib/docker/containers/*/*.log
+
+    pipeline_stages:
+      # Parse JSON logs from Docker
+      - json:
+          expressions:
+            log: log
+            stream: stream
+            time: time
+            container_name: attrs.name
+
+      # Extract timestamp
+      - timestamp:
+          source: time
+          format: RFC3339Nano
+
+      # Extract log level from log content
+      - regex:
+          expression: '(?P<level>INFO|WARN|ERROR|DEBUG)'
+          source: log
+
+      # Add labels
+      - labels:
+          level:
+          container_name:
+          stream:
+
+  # Scrape system logs
+  - job_name: system
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: varlogs
+          __path__: /var/log/*log
+
+  # Scrape Schema Registry application logs
+  - job_name: schema-registry
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: schema-registry
+          app: schema-registry
+          __path__: /var/log/schema-registry/*.log
+
+    pipeline_stages:
+      # Parse JSON structured logs
+      - json:
+          expressions:
+            timestamp: timestamp
+            level: level
+            message: message
+            target: target
+            correlation_id: correlation_id
+            request_id: request_id
+            schema_id: schema_id
+            user_id: user_id
+
+      # Use timestamp from log entry
+      - timestamp:
+          source: timestamp
+          format: RFC3339
+
+      # Add extracted fields as labels
+      - labels:
+          level:
+          correlation_id:
+          request_id:
+
+      # Keep important fields in the log line
+      - output:
+          source: message

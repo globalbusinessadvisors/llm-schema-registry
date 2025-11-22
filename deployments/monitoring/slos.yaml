@@ -1,0 +1,327 @@
+# Service Level Indicators (SLIs) and Service Level Objectives (SLOs)
+# for Schema Registry
+#
+# This file defines the SLIs, SLOs, error budgets, and burn rate alerts
+# following the SRE best practices
+
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: schema-registry-slos
+  namespace: schema-registry
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: schema_registry_slis
+      interval: 30s
+      rules:
+        # Availability SLI
+        - record: sli:availability:ratio_rate5m
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"2.."}[5m]))
+            /
+            sum(rate(schema_registry_http_requests_total[5m]))
+
+        - record: sli:availability:ratio_rate30m
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"2.."}[30m]))
+            /
+            sum(rate(schema_registry_http_requests_total[30m]))
+
+        - record: sli:availability:ratio_rate1h
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"2.."}[1h]))
+            /
+            sum(rate(schema_registry_http_requests_total[1h]))
+
+        - record: sli:availability:ratio_rate6h
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"2.."}[6h]))
+            /
+            sum(rate(schema_registry_http_requests_total[6h]))
+
+        - record: sli:availability:ratio_rate1d
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"2.."}[1d]))
+            /
+            sum(rate(schema_registry_http_requests_total[1d]))
+
+        - record: sli:availability:ratio_rate30d
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"2.."}[30d]))
+            /
+            sum(rate(schema_registry_http_requests_total[30d]))
+
+        # Latency SLI (p95)
+        - record: sli:latency:p95_5m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(schema_registry_http_request_duration_seconds_bucket[5m])) by (le)
+            )
+
+        - record: sli:latency:p95_30m
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(schema_registry_http_request_duration_seconds_bucket[30m])) by (le)
+            )
+
+        - record: sli:latency:p95_1h
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(schema_registry_http_request_duration_seconds_bucket[1h])) by (le)
+            )
+
+        - record: sli:latency:p95_1d
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(schema_registry_http_request_duration_seconds_bucket[1d])) by (le)
+            )
+
+        - record: sli:latency:p95_30d
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(schema_registry_http_request_duration_seconds_bucket[30d])) by (le)
+            )
+
+        # Latency SLI (p99)
+        - record: sli:latency:p99_5m
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(schema_registry_http_request_duration_seconds_bucket[5m])) by (le)
+            )
+
+        - record: sli:latency:p99_30d
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(schema_registry_http_request_duration_seconds_bucket[30d])) by (le)
+            )
+
+        # Error Rate SLI
+        - record: sli:error_rate:ratio_rate5m
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(schema_registry_http_requests_total[5m]))
+
+        - record: sli:error_rate:ratio_rate1h
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"5.."}[1h]))
+            /
+            sum(rate(schema_registry_http_requests_total[1h]))
+
+        - record: sli:error_rate:ratio_rate6h
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"5.."}[6h]))
+            /
+            sum(rate(schema_registry_http_requests_total[6h]))
+
+        - record: sli:error_rate:ratio_rate1d
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"5.."}[1d]))
+            /
+            sum(rate(schema_registry_http_requests_total[1d]))
+
+        - record: sli:error_rate:ratio_rate30d
+          expr: |
+            sum(rate(schema_registry_http_requests_total{status=~"5.."}[30d]))
+            /
+            sum(rate(schema_registry_http_requests_total[30d]))
+
+    - name: schema_registry_slo_targets
+      interval: 30s
+      rules:
+        # SLO Targets (as metrics for visualization)
+        - record: slo:availability:target
+          expr: 0.999  # 99.9% availability
+
+        - record: slo:latency_p95:target
+          expr: 0.010  # 10ms p95 latency
+
+        - record: slo:latency_p99:target
+          expr: 0.025  # 25ms p99 latency
+
+        - record: slo:error_rate:target
+          expr: 0.01   # 1% error rate
+
+        # Error Budget Calculations
+        - record: slo:availability:error_budget_remaining
+          expr: |
+            (sli:availability:ratio_rate30d - slo:availability:target)
+            /
+            (1 - slo:availability:target)
+
+        - record: slo:error_rate:error_budget_remaining
+          expr: |
+            (slo:error_rate:target - sli:error_rate:ratio_rate30d)
+            /
+            slo:error_rate:target
+
+        # Error Budget Burn Rates
+        - record: slo:availability:burn_rate_1h
+          expr: |
+            (1 - sli:availability:ratio_rate1h)
+            /
+            (1 - slo:availability:target)
+
+        - record: slo:availability:burn_rate_6h
+          expr: |
+            (1 - sli:availability:ratio_rate6h)
+            /
+            (1 - slo:availability:target)
+
+        - record: slo:error_rate:burn_rate_1h
+          expr: |
+            sli:error_rate:ratio_rate1h
+            /
+            slo:error_rate:target
+
+        - record: slo:error_rate:burn_rate_6h
+          expr: |
+            sli:error_rate:ratio_rate6h
+            /
+            slo:error_rate:target
+
+    - name: schema_registry_slo_compliance
+      interval: 1m
+      rules:
+        # SLO Compliance (boolean: 1 = compliant, 0 = violation)
+        - record: slo:availability:compliant
+          expr: |
+            (sli:availability:ratio_rate30d >= slo:availability:target)
+            and
+            bool 1
+
+        - record: slo:latency_p95:compliant
+          expr: |
+            (sli:latency:p95_30d <= slo:latency_p95:target)
+            and
+            bool 1
+
+        - record: slo:latency_p99:compliant
+          expr: |
+            (sli:latency:p99_30d <= slo:latency_p99:target)
+            and
+            bool 1
+
+        - record: slo:error_rate:compliant
+          expr: |
+            (sli:error_rate:ratio_rate30d <= slo:error_rate:target)
+            and
+            bool 1
+
+---
+# SLO Configuration Document (for reference)
+slos:
+  - name: availability
+    description: Percentage of successful HTTP requests (2xx status codes)
+    objective: 99.9%
+    window: 30d
+    error_budget: 0.1%  # 43.2 minutes of downtime per 30 days
+    implementation:
+      query: |
+        sum(rate(schema_registry_http_requests_total{status=~"2.."}[30d]))
+        /
+        sum(rate(schema_registry_http_requests_total[30d]))
+    burn_rate_alerts:
+      - window: 1h
+        burn_rate: 14.4  # Entire budget in 2 hours
+        severity: critical
+        for: 2m
+      - window: 6h
+        burn_rate: 6     # Entire budget in 5 hours
+        severity: critical
+        for: 15m
+
+  - name: latency_p95
+    description: 95th percentile request latency
+    objective: <10ms
+    window: 30d
+    implementation:
+      query: |
+        histogram_quantile(0.95,
+          sum(rate(schema_registry_http_request_duration_seconds_bucket[30d])) by (le)
+        )
+    thresholds:
+      - value: 10ms
+        severity: warning
+        for: 10m
+      - value: 25ms
+        severity: critical
+        for: 5m
+
+  - name: latency_p99
+    description: 99th percentile request latency
+    objective: <25ms
+    window: 30d
+    implementation:
+      query: |
+        histogram_quantile(0.99,
+          sum(rate(schema_registry_http_request_duration_seconds_bucket[30d])) by (le)
+        )
+
+  - name: error_rate
+    description: Percentage of HTTP requests resulting in 5xx errors
+    objective: <1%
+    window: 30d
+    error_budget: 1%  # 1 in 100 requests can fail
+    implementation:
+      query: |
+        sum(rate(schema_registry_http_requests_total{status=~"5.."}[30d]))
+        /
+        sum(rate(schema_registry_http_requests_total[30d]))
+    burn_rate_alerts:
+      - window: 1h
+        burn_rate: 14.4
+        severity: critical
+        for: 2m
+      - window: 6h
+        burn_rate: 6
+        severity: critical
+        for: 15m
+
+  - name: cache_hit_rate
+    description: L1 cache hit rate
+    objective: >95%
+    window: 1h
+    implementation:
+      query: schema_registry_cache_hit_rate{tier="L1"}
+    thresholds:
+      - value: 0.95
+        severity: warning
+        for: 15m
+      - value: 0.70
+        severity: critical
+        for: 5m
+
+# Error Budget Policy
+error_budget_policy:
+  - remaining_budget: ">50%"
+    action: "No restrictions. Full feature velocity."
+
+  - remaining_budget: "25%-50%"
+    action: "Caution. Review deployment frequency. Increase monitoring."
+
+  - remaining_budget: "10%-25%"
+    action: "Slow down. Reduce deployment frequency. Focus on reliability."
+
+  - remaining_budget: "<10%"
+    action: "Code freeze (except fixes). All hands on reliability."
+
+  - remaining_budget: "0%"
+    action: "Full stop. SLO violated. Incident declared. Fix immediately."
+
+# SLO Review Schedule
+slo_reviews:
+  frequency: quarterly
+  participants:
+    - SRE Team
+    - Engineering Team
+    - Product Team
+  agenda:
+    - Review SLO compliance (last 90 days)
+    - Analyze SLO violations and incidents
+    - Review error budget consumption
+    - Adjust SLO targets if needed
+    - Update error budget policy if needed

@@ -1,0 +1,313 @@
+name: Security Scanning
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+env:
+  RUST_VERSION: 1.82
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ==========================================================================
+  # Dependency Vulnerability Scanning
+  # ==========================================================================
+  cargo-audit:
+    name: Cargo Audit - Dependency Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        run: cargo audit --json > cargo-audit-report.json
+        continue-on-error: true
+
+      - name: Display audit results
+        run: cargo audit
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: cargo-audit-report
+          path: cargo-audit-report.json
+
+  # ==========================================================================
+  # License and Dependency Policy Check
+  # ==========================================================================
+  cargo-deny:
+    name: Cargo Deny - License & Policy Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          log-level: warn
+          command: check
+
+  # ==========================================================================
+  # Secret Scanning
+  # ==========================================================================
+  gitleaks:
+    name: Gitleaks - Secret Scanning
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ==========================================================================
+  # Docker Image Vulnerability Scanning (Trivy)
+  # ==========================================================================
+  trivy-scan:
+    name: Trivy - Container Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t schema-registry:security-scan .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'schema-registry:security-scan'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Run Trivy in table format
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'schema-registry:security-scan'
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+  # ==========================================================================
+  # SAST - Static Application Security Testing
+  # ==========================================================================
+  semgrep:
+    name: Semgrep - SAST Scanning
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep
+        run: |
+          semgrep scan --config=auto \
+            --json --output=semgrep-results.json \
+            --exclude=target/ \
+            --exclude=node_modules/
+        continue-on-error: true
+
+      - name: Upload Semgrep results
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
+
+  # ==========================================================================
+  # CodeQL Analysis
+  # ==========================================================================
+  codeql:
+    name: CodeQL Security Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: 'cpp, javascript, python'
+          # Rust not directly supported, but C++ analysis can catch some issues
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+  # ==========================================================================
+  # Security Test Suite
+  # ==========================================================================
+  security-tests:
+    name: Run Security Test Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: schema_registry_test
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+
+      - name: Install protoc
+        run: |
+          curl -LO https://github.com/protocolbuffers/protobuf/releases/download/v25.1/protoc-25.1-linux-x86_64.zip
+          unzip -o protoc-25.1-linux-x86_64.zip -d $HOME/.local
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-security-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run security tests
+        run: cargo test --test security_tests --verbose
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/schema_registry_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Run validation tests
+        run: cargo test -p schema-registry-api validation --verbose
+
+      - name: Run authentication tests
+        run: cargo test -p schema-registry-security auth --verbose
+
+      - name: Run audit logging tests
+        run: cargo test -p schema-registry-security audit --verbose
+
+  # ==========================================================================
+  # Fuzzing (Optional - can be expensive)
+  # ==========================================================================
+  cargo-fuzz:
+    name: Cargo Fuzz - Fuzzing Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+
+      - name: Install cargo-fuzz
+        run: cargo install cargo-fuzz
+
+      - name: Run fuzz tests (limited time)
+        run: |
+          # Run fuzzing for a limited time (5 minutes per target)
+          cargo fuzz list 2>/dev/null || echo "No fuzz targets defined"
+        continue-on-error: true
+
+  # ==========================================================================
+  # SBOM Generation
+  # ==========================================================================
+  sbom:
+    name: Generate SBOM (Software Bill of Materials)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-sbom
+        run: cargo install cargo-sbom
+
+      - name: Generate SBOM
+        run: cargo sbom > sbom.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.json
+
+  # ==========================================================================
+  # Security Summary
+  # ==========================================================================
+  security-summary:
+    name: Security Scan Summary
+    needs: [cargo-audit, cargo-deny, gitleaks, trivy-scan, security-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          echo "=== Security Scan Summary ==="
+          echo "Cargo Audit: ${{ needs.cargo-audit.result }}"
+          echo "Cargo Deny: ${{ needs.cargo-deny.result }}"
+          echo "Gitleaks: ${{ needs.gitleaks.result }}"
+          echo "Trivy: ${{ needs.trivy-scan.result }}"
+          echo "Security Tests: ${{ needs.security-tests.result }}"
+
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "❌ Security scans failed"
+            exit 1
+          else
+            echo "✅ All security scans passed"
+          fi

@@ -1,0 +1,45 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+/dist/
+/build/
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite
+
+# Test coverage
+/coverage/
+*.profraw
+*.profdata
+
+# Documentation
+/target/doc/
+
+# Node modules (if using any JS tooling)
+node_modules/
+.claude-flow/
+
+# Plans directory (keep the directory but ignore temp files)
+plans/*.tmp
+plans/*.bak

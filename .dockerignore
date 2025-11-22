@@ -1,0 +1,70 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Documentation
+*.md
+!README.md
+docs/
+plans/
+
+# Node
+node_modules/
+package-lock.json
+package.json
+
+# Test files
+tests/
+benches/
+examples/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Temporary files
+*.log
+*.tmp
+tmp/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Kubernetes
+deployments/
+k8s/
+helm/
+
+# Coverage
+coverage/
+*.profdata
+*.profraw
+
+# Database
+*.db
+*.sqlite
+migrations/
+
+# OS
+Thumbs.db
