@@ -195,7 +195,7 @@ The project successfully compiles with all 9 crates and comprehensive test infra
 
 **Crates:**
 - schema-registry-core (15 tests passing)
-- schema-registry-api (gRPC + REST)
+- llm-schema-api (gRPC + REST)
 - schema-registry-storage (PostgreSQL, Redis, S3)
 - schema-registry-validation
 - schema-registry-compatibility
@@ -210,7 +210,7 @@ The project successfully compiles with all 9 crates and comprehensive test infra
 llm-schema-registry/
 ├── crates/
 │   ├── schema-registry-core/           # Core types, traits, state machine
-│   ├── schema-registry-api/            # REST (Axum) and gRPC (Tonic) APIs
+│   ├── llm-schema-api/                 # REST (Axum) and gRPC (Tonic) APIs
 │   ├── schema-registry-storage/        # PostgreSQL, Redis, S3 abstraction
 │   ├── schema-registry-validation/     # Multi-format validation engine
 │   ├── schema-registry-compatibility/  # Compatibility checking (7 modes)

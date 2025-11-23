@@ -1,4 +1,4 @@
-# schema-registry-api
+# llm-schema-api
 
 gRPC and REST API definitions for the LLM Schema Registry.
 

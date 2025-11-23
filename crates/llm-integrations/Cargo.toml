@@ -14,7 +14,7 @@ readme = "README.md"
 [dependencies]
 # Core dependencies
 schema-registry-core = { version = "0.1.0", path = "../schema-registry-core" }
-schema-registry-api = { version = "0.1.0", path = "../schema-registry-api" }
+llm-schema-api = { version = "0.1.0", path = "../llm-schema-api" }
 schema-registry-validation = { version = "0.1.0", path = "../schema-registry-validation" }
 
 # Async runtime

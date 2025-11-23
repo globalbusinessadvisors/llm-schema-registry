@@ -231,7 +231,7 @@ jobs:
           REDIS_URL: redis://localhost:6379
 
       - name: Run validation tests
-        run: cargo test -p schema-registry-api validation --verbose
+        run: cargo test -p llm-schema-api validation --verbose
 
       - name: Run authentication tests
         run: cargo test -p schema-registry-security auth --verbose

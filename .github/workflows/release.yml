@@ -289,7 +289,7 @@ jobs:
       #   run: |
       #     cargo publish -p schema-registry-core
       #     sleep 30
-      #     cargo publish -p schema-registry-api
+      #     cargo publish -p llm-schema-api
       #   env:
       #     CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 

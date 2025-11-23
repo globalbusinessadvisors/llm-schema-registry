@@ -1,5 +1,5 @@
 [package]
-name = "schema-registry-api"
+name = "llm-schema-api"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

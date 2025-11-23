@@ -18,7 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 schema-registry-core = { workspace = true }
-schema-registry-api = { workspace = true }
+llm-schema-api = { workspace = true }
 schema-registry-storage = { workspace = true }
 schema-registry-validation = { workspace = true }
 schema-registry-compatibility = { workspace = true }

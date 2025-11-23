@@ -114,9 +114,9 @@ jobs:
           cd ../..
           sleep 30
 
-      - name: Publish schema-registry-api
+      - name: Publish llm-schema-api
         run: |
-          cd crates/schema-registry-api
+          cd crates/llm-schema-api
           cargo publish --allow-dirty || echo "Already published or failed"
           cd ../..
           sleep 30

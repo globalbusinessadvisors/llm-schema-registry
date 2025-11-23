@@ -2,7 +2,7 @@
 //!
 //! Tests for OWASP Top 10 vulnerabilities and security best practices
 
-use schema_registry_api::validation::*;
+use llm_schema_api::validation::*;
 use schema_registry_security::*;
 
 #[cfg(test)]
@@ -15,7 +15,7 @@ mod owasp_top_10_tests {
 
     #[tokio::test]
     async fn test_authorization_enforcement() {
-        use schema_registry_api::auth::{AuthPrincipal, Permission};
+        use llm_schema_api::auth::{AuthPrincipal, Permission};
         use std::collections::HashSet;
 
         // User with read-only permissions
