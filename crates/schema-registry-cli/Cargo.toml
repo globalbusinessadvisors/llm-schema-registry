@@ -11,10 +11,46 @@ name = "schema-cli"
 path = "src/main.rs"
 
 [dependencies]
+# Internal crates
 schema-registry-core = { workspace = true }
+schema-registry-storage = { path = "../schema-registry-storage" }
+schema-registry-validation = { path = "../schema-registry-validation" }
+schema-registry-compatibility = { path = "../schema-registry-compatibility" }
+schema-registry-analytics = { path = "../schema-registry-analytics" }
+schema-registry-lineage = { path = "../schema-registry-lineage" }
+schema-registry-migration = { path = "../schema-registry-migration" }
+schema-registry-security = { path = "../schema-registry-security" }
+
+# Async runtime
 tokio = { workspace = true }
+
+# CLI framework
 clap = { workspace = true }
+
+# Output formatting
 comfy-table = { workspace = true }
+colored = "2.1"
+indicatif = "0.17"
+
+# Serialization
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = "0.9"
+toml = "0.8"
+
+# Error handling
 anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+url = { workspace = true }
+
+# Logging
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Config management
+config = "0.14"
+dirs = "5.0"

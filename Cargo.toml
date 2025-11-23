@@ -7,6 +7,9 @@ members = [
     "crates/schema-registry-compatibility",
     "crates/schema-registry-security",
     "crates/schema-registry-observability",
+    "crates/schema-registry-analytics",
+    "crates/schema-registry-lineage",
+    "crates/schema-registry-migration",
     "crates/schema-registry-cli",
     "crates/schema-registry-server",
     "crates/llm-integrations",
@@ -31,6 +34,9 @@ schema-registry-validation = { path = "crates/schema-registry-validation" }
 schema-registry-compatibility = { path = "crates/schema-registry-compatibility" }
 schema-registry-security = { path = "crates/schema-registry-security" }
 schema-registry-observability = { path = "crates/schema-registry-observability" }
+schema-registry-analytics = { path = "crates/schema-registry-analytics" }
+schema-registry-lineage = { path = "crates/schema-registry-lineage" }
+schema-registry-migration = { path = "crates/schema-registry-migration" }
 
 # Async runtime
 tokio = { version = "1.35", features = ["full"] }
@@ -114,9 +120,14 @@ rand = "0.8"
 # CLI
 clap = { version = "4.4", features = ["derive", "env"] }
 comfy-table = "7.1"
+colored = "2.1"
+indicatif = "0.17"
 
 # Configuration
 config = "0.14"
+serde_yaml = "0.9"
+toml = "0.8"
+dirs = "5.0"
 
 # Concurrency
 parking_lot = "0.12"

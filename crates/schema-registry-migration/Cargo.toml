@@ -1,0 +1,47 @@
+[package]
+name = "schema-registry-migration"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+# Internal crates
+schema-registry-core = { workspace = true }
+schema-registry-validation = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Schema formats
+apache-avro = { workspace = true }
+jsonschema = { workspace = true }
+schemars = { workspace = true }
+
+# Utilities
+uuid = { workspace = true }
+chrono = { workspace = true }
+semver = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Template engine
+tera = "1.19"
+
+# Code formatting
+indoc = "2.0"
+
+# Logging
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+proptest = { workspace = true }

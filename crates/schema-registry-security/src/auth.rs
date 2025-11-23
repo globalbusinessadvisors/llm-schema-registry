@@ -165,7 +165,7 @@ impl TokenRevocationList {
     }
 
     /// Clear expired tokens from the revocation list
-    pub async fn cleanup_expired(&self, max_age_secs: u64) {
+    pub async fn cleanup_expired(&self, _max_age_secs: u64) {
         // In production, this would check expiration times
         // For now, this is a placeholder
         tracing::debug!("Cleaning up expired revoked tokens");

@@ -83,55 +83,91 @@ impl TestEnvironment {
         })
     }
 
-    /// Initialize database schema
+    /// Initialize database schema (matches production schema)
     async fn init_database(pool: &sqlx::PgPool) -> Result<()> {
+        // Create extensions
+        sqlx::query("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
+            .execute(pool)
+            .await?;
+
+        sqlx::query("CREATE EXTENSION IF NOT EXISTS \"pg_trgm\"")
+            .execute(pool)
+            .await?;
+
+        sqlx::query("CREATE EXTENSION IF NOT EXISTS \"btree_gin\"")
+            .execute(pool)
+            .await?;
+
+        // Main schemas table (production schema)
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS schemas (
-                id UUID PRIMARY KEY,
-                name VARCHAR(255) NOT NULL,
-                namespace VARCHAR(255) NOT NULL,
-                version VARCHAR(50) NOT NULL,
-                format VARCHAR(50) NOT NULL,
-                content TEXT NOT NULL,
-                content_hash VARCHAR(64) NOT NULL,
-                description TEXT,
-                compatibility_mode VARCHAR(50) NOT NULL,
-                state VARCHAR(50) NOT NULL DEFAULT 'ACTIVE',
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                subject VARCHAR(255) NOT NULL,
+
+                -- Semantic version components
+                version_major INTEGER NOT NULL,
+                version_minor INTEGER NOT NULL,
+                version_patch INTEGER NOT NULL,
+                version_prerelease VARCHAR(255),
+                version_build VARCHAR(255),
+
+                schema_type VARCHAR(50) NOT NULL,
+                content JSONB NOT NULL,
+                metadata JSONB NOT NULL DEFAULT '{}',
+
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                metadata JSONB,
-                UNIQUE(namespace, name, version)
+                created_by VARCHAR(255),
+
+                compatibility_level VARCHAR(50) NOT NULL,
+
+                deleted_at TIMESTAMPTZ,
+
+                CONSTRAINT unique_subject_version UNIQUE (
+                    subject, version_major, version_minor, version_patch,
+                    COALESCE(version_prerelease, ''), COALESCE(version_build, '')
+                )
             );
 
-            CREATE INDEX IF NOT EXISTS idx_schemas_namespace_name ON schemas(namespace, name);
-            CREATE INDEX IF NOT EXISTS idx_schemas_content_hash ON schemas(content_hash);
+            CREATE INDEX IF NOT EXISTS idx_schemas_subject ON schemas(subject) WHERE deleted_at IS NULL;
             CREATE INDEX IF NOT EXISTS idx_schemas_created_at ON schemas(created_at DESC);
-            CREATE INDEX IF NOT EXISTS idx_schemas_state ON schemas(state);
+            CREATE INDEX IF NOT EXISTS idx_schemas_type ON schemas(schema_type) WHERE deleted_at IS NULL;
+            CREATE INDEX IF NOT EXISTS idx_schemas_metadata_gin ON schemas USING GIN (metadata jsonb_path_ops);
+            CREATE INDEX IF NOT EXISTS idx_schemas_content_gin ON schemas USING GIN (content jsonb_path_ops);
 
             CREATE TABLE IF NOT EXISTS compatibility_checks (
-                id UUID PRIMARY KEY,
-                old_schema_id UUID NOT NULL REFERENCES schemas(id),
-                new_schema_id UUID NOT NULL REFERENCES schemas(id),
-                mode VARCHAR(50) NOT NULL,
-                is_compatible BOOLEAN NOT NULL,
+                id BIGSERIAL PRIMARY KEY,
+                subject VARCHAR(255) NOT NULL,
+                old_version VARCHAR(255) NOT NULL,
+                new_version VARCHAR(255) NOT NULL,
+                compatibility_level VARCHAR(50) NOT NULL,
+                compatible BOOLEAN NOT NULL,
                 violations JSONB,
-                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                checked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
-            CREATE INDEX IF NOT EXISTS idx_compat_old_schema ON compatibility_checks(old_schema_id);
-            CREATE INDEX IF NOT EXISTS idx_compat_new_schema ON compatibility_checks(new_schema_id);
+            CREATE INDEX IF NOT EXISTS idx_compat_subject ON compatibility_checks(subject, checked_at DESC);
 
-            CREATE TABLE IF NOT EXISTS validation_results (
-                id UUID PRIMARY KEY,
-                schema_id UUID NOT NULL REFERENCES schemas(id),
+            CREATE TABLE IF NOT EXISTS validation_history (
+                id BIGSERIAL PRIMARY KEY,
+                schema_id UUID NOT NULL REFERENCES schemas(id) ON DELETE CASCADE,
                 data_hash VARCHAR(64) NOT NULL,
-                is_valid BOOLEAN NOT NULL,
-                errors JSONB,
-                validated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                valid BOOLEAN NOT NULL,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                validated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                duration_ms DOUBLE PRECISION NOT NULL
             );
 
-            CREATE INDEX IF NOT EXISTS idx_validation_schema ON validation_results(schema_id);
+            CREATE INDEX IF NOT EXISTS idx_validation_schema ON validation_history(schema_id, validated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS subjects (
+                name VARCHAR(255) PRIMARY KEY,
+                default_compatibility_level VARCHAR(50) NOT NULL,
+                description TEXT,
+                tags TEXT[] DEFAULT '{}',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
             "#,
         )
         .execute(pool)
@@ -172,7 +208,7 @@ impl TestEnvironment {
 
         // Clear PostgreSQL
         if let Some(pool) = &self.db_pool {
-            sqlx::query("TRUNCATE schemas, compatibility_checks, validation_results CASCADE")
+            sqlx::query("TRUNCATE schemas, compatibility_checks, validation_history, subjects CASCADE")
                 .execute(pool)
                 .await?;
             tracing::debug!("PostgreSQL data cleared");
