@@ -1,0 +1,41 @@
+{
+  "name": "@llm-dev-ops/llm-schema-registry-cli",
+  "version": "0.1.0",
+  "description": "Command-line interface for LLM Schema Registry",
+  "bin": {
+    "llm-schema": "./bin/llm-schema-cli"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/globalbusinessadvisors/llm-schema-registry"
+  },
+  "keywords": [
+    "llm",
+    "schema",
+    "registry",
+    "cli",
+    "command-line"
+  ],
+  "author": "Schema Registry Team",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "files": [
+    "bin/",
+    "install.js",
+    "README.md"
+  ]
+}

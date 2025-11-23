@@ -1,0 +1,53 @@
+{
+  "name": "@llm-dev-ops/llm-schema-registry-integrations",
+  "version": "0.1.0",
+  "description": "LLM framework integrations for Schema Registry (LangChain, LlamaIndex, vLLM)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/globalbusinessadvisors/llm-schema-registry"
+  },
+  "keywords": [
+    "llm",
+    "schema",
+    "registry",
+    "langchain",
+    "llamaindex",
+    "vllm",
+    "integration"
+  ],
+  "author": "Schema Registry Team",
+  "license": "Apache-2.0",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@llm-dev-ops/llm-schema-registry-sdk": "^0.1.0"
+  },
+  "peerDependencies": {
+    "langchain": ">=0.1.0",
+    "llamaindex": ">=0.1.0"
+  },
+  "peerDependenciesMeta": {
+    "langchain": {
+      "optional": true
+    },
+    "llamaindex": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.6",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "README.md"
+  ]
+}

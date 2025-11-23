@@ -1,0 +1,42 @@
+{
+  "name": "@llm-dev-ops/llm-schema-registry-server",
+  "version": "0.1.0",
+  "description": "LLM Schema Registry Server - HTTP/gRPC server for schema management",
+  "bin": {
+    "llm-schema-server": "./bin/schema-registry-server"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/globalbusinessadvisors/llm-schema-registry"
+  },
+  "keywords": [
+    "llm",
+    "schema",
+    "registry",
+    "server",
+    "grpc",
+    "http"
+  ],
+  "author": "Schema Registry Team",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "files": [
+    "bin/",
+    "install.js",
+    "README.md"
+  ]
+}

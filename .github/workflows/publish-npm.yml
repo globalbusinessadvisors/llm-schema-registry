@@ -48,9 +48,102 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+  publish-cli:
+    name: Publish CLI to npm
+    needs: [publish-typescript-sdk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish CLI to npm
+        run: npm publish --access public
+        working-directory: ./npm-packages/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-server:
+    name: Publish Server to npm
+    needs: [publish-typescript-sdk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish Server to npm
+        run: npm publish --access public
+        working-directory: ./npm-packages/server
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-api:
+    name: Publish API to npm
+    needs: [publish-typescript-sdk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Publish API to npm
+        run: npm publish --access public
+        working-directory: ./npm-packages/api
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-integrations:
+    name: Publish Integrations to npm
+    needs: [publish-typescript-sdk]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Update SDK dependency
+        run: |
+          npm pkg set dependencies.@llm-dev-ops/llm-schema-registry-sdk="^0.1.0"
+        working-directory: ./npm-packages/integrations
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./npm-packages/integrations
+
+      - name: Build Integrations
+        run: npm run build
+        working-directory: ./npm-packages/integrations
+
+      - name: Publish Integrations to npm
+        run: npm publish --access public
+        working-directory: ./npm-packages/integrations
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   summary:
     name: Publish Summary
-    needs: [publish-typescript-sdk]
+    needs: [publish-typescript-sdk, publish-cli, publish-server, publish-api, publish-integrations]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -58,11 +151,29 @@ jobs:
         run: |
           echo "## NPM Publish Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- TypeScript SDK: Published to npm" >> $GITHUB_STEP_SUMMARY
-          echo "  - Package: @llm-dev-ops/llm-schema-registry-sdk" >> $GITHUB_STEP_SUMMARY
-          echo "  - Version: 0.1.0" >> $GITHUB_STEP_SUMMARY
+          echo "### Published Packages" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **TypeScript SDK**: @llm-dev-ops/llm-schema-registry-sdk@0.1.0" >> $GITHUB_STEP_SUMMARY
+          echo "- **CLI**: @llm-dev-ops/llm-schema-registry-cli@0.1.0" >> $GITHUB_STEP_SUMMARY
+          echo "- **Server**: @llm-dev-ops/llm-schema-registry-server@0.1.0" >> $GITHUB_STEP_SUMMARY
+          echo "- **API**: @llm-dev-ops/llm-schema-api@0.1.0" >> $GITHUB_STEP_SUMMARY
+          echo "- **Integrations**: @llm-dev-ops/llm-schema-registry-integrations@0.1.0" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Installation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "# SDK" >> $GITHUB_STEP_SUMMARY
           echo "npm install @llm-dev-ops/llm-schema-registry-sdk" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# CLI" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g @llm-dev-ops/llm-schema-registry-cli" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Server" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g @llm-dev-ops/llm-schema-registry-server" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# API" >> $GITHUB_STEP_SUMMARY
+          echo "npm install -g @llm-dev-ops/llm-schema-api" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "# Integrations" >> $GITHUB_STEP_SUMMARY
+          echo "npm install @llm-dev-ops/llm-schema-registry-integrations" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
