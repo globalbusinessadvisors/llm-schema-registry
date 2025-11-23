@@ -1,0 +1,60 @@
+[package]
+name = "llm-schema-registry-sdk"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+authors = ["Schema Registry Team"]
+license = "Apache-2.0"
+description = "Production-ready Rust client SDK for LLM Schema Registry with zero-cost abstractions and async support"
+repository = "https://github.com/llm-schema-registry/llm-schema-registry"
+documentation = "https://docs.rs/llm-schema-registry-sdk"
+readme = "README.md"
+keywords = ["schema", "registry", "llm", "validation", "async"]
+categories = ["api-bindings", "asynchronous", "development-tools"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+
+# HTTP client
+reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+
+# Serialization/Deserialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Caching with async support
+moka = { version = "0.12", features = ["future"] }
+
+# Retry logic
+tokio-retry = "0.3"
+
+# Logging
+tracing = "0.1"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# URL parsing
+url = "2.5"
+
+[dev-dependencies]
+tokio-test = "0.4"
+mockito = "1.2"
+wiremock = "0.5"
+
+[lib]
+name = "llm_schema_registry_sdk"
+path = "src/lib.rs"
+
+[workspace]
+# This SDK is standalone and not part of the parent workspace
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1

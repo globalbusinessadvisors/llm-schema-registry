@@ -1,0 +1,11 @@
+/workspaces/llm-schema-registry/sdks/rust/target/debug/deps/serde_qs-006d8f732625d4f9.d: /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/lib.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/de/mod.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/de/parse.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/error.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/ser.rs
+
+/workspaces/llm-schema-registry/sdks/rust/target/debug/deps/libserde_qs-006d8f732625d4f9.rlib: /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/lib.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/de/mod.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/de/parse.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/error.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/ser.rs
+
+/workspaces/llm-schema-registry/sdks/rust/target/debug/deps/libserde_qs-006d8f732625d4f9.rmeta: /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/lib.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/de/mod.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/de/parse.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/error.rs /home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/ser.rs
+
+/home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/lib.rs:
+/home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/de/mod.rs:
+/home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/de/parse.rs:
+/home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/error.rs:
+/home/codespace/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_qs-0.8.5/src/ser.rs:
