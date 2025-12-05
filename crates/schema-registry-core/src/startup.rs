@@ -3,14 +3,23 @@
 //! Provides startup utilities for initializing Schema Registry with
 //! Config Manager integration. This module demonstrates the Phase 2B
 //! runtime "consumes-from" pattern without modifying core logic.
+//!
+//! # Phase 2B Enhancements
+//!
+//! This module now supports loading additional configuration domains:
+//! - Schema sources (external registries, file systems, cloud storage)
+//! - Storage paths (primary, cache, archive configurations)
+//! - Versioning policies (strategies, retention, compatibility)
+//! - Validation settings (comprehensive validation configuration)
 
 use crate::config_manager_adapter::{
-    ConfigConsumer, ConfigManagerAdapter, GlobalConfig, SchemaPolicies, ConfigError,
+    ConfigConsumer, ConfigConsumerExt, ConfigManagerAdapter, GlobalConfig, SchemaPolicies, ConfigError,
+    SchemaSourcesConfig, StoragePathsConfig, VersioningPoliciesConfig, ValidationSettingsConfig,
 };
 use llm_config_core::Environment;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{info, warn};
+use tracing::{info, warn, debug};
 
 /// Startup configuration for Schema Registry
 #[derive(Debug, Clone)]
@@ -36,6 +45,10 @@ impl Default for StartupConfig {
 }
 
 /// Startup context containing loaded configuration and policies
+///
+/// This struct contains all configuration loaded from Config Manager,
+/// including the Phase 2B extensions for schema sources, storage paths,
+/// versioning policies, and validation settings.
 #[derive(Clone)]
 pub struct StartupContext {
     /// Global configuration loaded from Config Manager
@@ -46,6 +59,20 @@ pub struct StartupContext {
 
     /// Config adapter for runtime refresh
     pub config_adapter: Option<Arc<dyn ConfigConsumer>>,
+
+    // Phase 2B: Additional configuration domains
+
+    /// Schema sources configuration (Phase 2B)
+    pub schema_sources: SchemaSourcesConfig,
+
+    /// Storage paths configuration (Phase 2B)
+    pub storage_paths: StoragePathsConfig,
+
+    /// Versioning policies configuration (Phase 2B)
+    pub versioning_policies: VersioningPoliciesConfig,
+
+    /// Validation settings configuration (Phase 2B)
+    pub validation_settings: ValidationSettingsConfig,
 }
 
 impl Default for StartupContext {
@@ -54,6 +81,10 @@ impl Default for StartupContext {
             global_config: GlobalConfig::default(),
             schema_policies: SchemaPolicies::default(),
             config_adapter: None,
+            schema_sources: SchemaSourcesConfig::default(),
+            storage_paths: StoragePathsConfig::default(),
+            versioning_policies: VersioningPoliciesConfig::default(),
+            validation_settings: ValidationSettingsConfig::default(),
         }
     }
 }
@@ -157,16 +188,72 @@ pub async fn initialize_with_config_manager(
         }
     };
 
-    info!("Schema Registry initialization complete");
+    // Phase 2B: Load schema sources configuration
+    let schema_sources = match adapter.load_schema_sources() {
+        Ok(sources) => {
+            info!("Schema sources configuration loaded ({} sources)", sources.sources.len());
+            sources
+        }
+        Err(e) => {
+            debug!("Failed to load schema sources, using defaults: {}", e);
+            SchemaSourcesConfig::default()
+        }
+    };
+
+    // Phase 2B: Load storage paths configuration
+    let storage_paths = match adapter.load_storage_paths() {
+        Ok(paths) => {
+            info!("Storage paths configuration loaded (primary: {:?})", paths.primary.backend);
+            paths
+        }
+        Err(e) => {
+            debug!("Failed to load storage paths, using defaults: {}", e);
+            StoragePathsConfig::default()
+        }
+    };
+
+    // Phase 2B: Load versioning policies configuration
+    let versioning_policies = match adapter.load_versioning_policies() {
+        Ok(policies) => {
+            info!("Versioning policies loaded (strategy: {:?})", policies.default_strategy);
+            policies
+        }
+        Err(e) => {
+            debug!("Failed to load versioning policies, using defaults: {}", e);
+            VersioningPoliciesConfig::default()
+        }
+    };
+
+    // Phase 2B: Load validation settings configuration
+    let validation_settings = match adapter.load_validation_settings() {
+        Ok(settings) => {
+            info!("Validation settings loaded (LLM validation: {})", settings.llm.enabled);
+            settings
+        }
+        Err(e) => {
+            debug!("Failed to load validation settings, using defaults: {}", e);
+            ValidationSettingsConfig::default()
+        }
+    };
+
+    info!("Schema Registry initialization complete (Phase 2B)");
     info!("Server will listen on {}:{}", global_config.server.host, global_config.server.port);
     info!("Validation: max_schema_size={} bytes, strict_mode={}",
           global_config.validation.max_schema_size,
           global_config.validation.strict_mode);
+    info!("Phase 2B: schema_sources={}, versioning={:?}, llm_validation={}",
+          schema_sources.sources.len(),
+          versioning_policies.default_strategy,
+          validation_settings.llm.enabled);
 
     Ok(StartupContext {
         global_config,
         schema_policies,
         config_adapter: Some(Arc::new(adapter)),
+        schema_sources,
+        storage_paths,
+        versioning_policies,
+        validation_settings,
     })
 }
 
@@ -193,6 +280,7 @@ pub async fn initialize_prod(config_path: PathBuf) -> Result<StartupContext, Con
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config_manager_adapter::{VersioningStrategy, StorageBackendType};
 
     #[tokio::test]
     async fn test_startup_with_defaults() {
@@ -206,6 +294,27 @@ mod tests {
         let context = StartupContext::default();
         assert_eq!(context.global_config.server.port, 8080);
         assert_eq!(context.schema_policies.field_naming.convention, "snake_case");
+    }
+
+    #[tokio::test]
+    async fn test_startup_context_phase_2b_defaults() {
+        let context = StartupContext::default();
+
+        // Verify Phase 2B schema sources defaults
+        assert!(context.schema_sources.sources.is_empty());
+        assert!(!context.schema_sources.enable_discovery);
+
+        // Verify Phase 2B storage paths defaults
+        assert_eq!(context.storage_paths.primary.backend, StorageBackendType::Postgres);
+        assert!(context.storage_paths.cache.is_none());
+
+        // Verify Phase 2B versioning policies defaults
+        assert_eq!(context.versioning_policies.default_strategy, VersioningStrategy::Semantic);
+        assert!(context.versioning_policies.compatibility.enforce_on_register);
+
+        // Verify Phase 2B validation settings defaults
+        assert!(context.validation_settings.llm.enabled);
+        assert!(context.validation_settings.custom_rules.enabled);
     }
 
     #[test]

@@ -439,6 +439,603 @@ pub fn create_prod_adapter(storage_path: impl AsRef<Path>) -> Result<Arc<dyn Con
     Ok(Arc::new(adapter))
 }
 
+// ============================================================================
+// Phase 2B: Schema Sources Configuration Adapter
+// ============================================================================
+
+/// Configuration for schema sources loaded from Config Manager
+///
+/// This defines external schema sources that can be consumed by the registry,
+/// such as external registries, file systems, or cloud storage locations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemaSourcesConfig {
+    /// List of configured schema sources
+    pub sources: Vec<SchemaSource>,
+
+    /// Default source to use when not specified
+    pub default_source: Option<String>,
+
+    /// Whether to enable source discovery
+    pub enable_discovery: bool,
+}
+
+impl Default for SchemaSourcesConfig {
+    fn default() -> Self {
+        Self {
+            sources: Vec::new(),
+            default_source: None,
+            enable_discovery: false,
+        }
+    }
+}
+
+/// Individual schema source configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemaSource {
+    /// Unique identifier for this source
+    pub id: String,
+
+    /// Human-readable name
+    pub name: String,
+
+    /// Source type (file, http, s3, registry)
+    pub source_type: SchemaSourceType,
+
+    /// Connection/location URI
+    pub uri: String,
+
+    /// Authentication configuration (optional)
+    pub auth: Option<SourceAuthConfig>,
+
+    /// Polling interval for updates (in seconds, 0 = disabled)
+    pub poll_interval_secs: u64,
+
+    /// Priority for source resolution (lower = higher priority)
+    pub priority: u32,
+
+    /// Whether this source is enabled
+    pub enabled: bool,
+}
+
+/// Type of schema source
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SchemaSourceType {
+    /// Local file system
+    File,
+    /// HTTP/HTTPS endpoint
+    Http,
+    /// S3 bucket
+    S3,
+    /// External schema registry (Confluent, AWS Glue, etc.)
+    Registry,
+    /// Git repository
+    Git,
+}
+
+/// Authentication configuration for schema sources
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceAuthConfig {
+    /// Authentication type
+    pub auth_type: String,
+
+    /// Credentials key reference (not the actual credentials)
+    pub credentials_key: Option<String>,
+
+    /// Additional auth parameters
+    pub params: HashMap<String, String>,
+}
+
+// ============================================================================
+// Phase 2B: Storage Paths Configuration Adapter
+// ============================================================================
+
+/// Configuration for schema storage paths loaded from Config Manager
+///
+/// This defines where schemas are stored, including primary, cache,
+/// and archive locations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoragePathsConfig {
+    /// Primary storage configuration
+    pub primary: StoragePathEntry,
+
+    /// Cache layer configuration (optional)
+    pub cache: Option<StoragePathEntry>,
+
+    /// Archive storage configuration (optional)
+    pub archive: Option<StoragePathEntry>,
+
+    /// Temporary/working directory
+    pub temp_dir: Option<String>,
+
+    /// Backup destination paths
+    pub backup_paths: Vec<String>,
+
+    /// Data migration paths
+    pub migration_paths: MigrationPathsConfig,
+}
+
+impl Default for StoragePathsConfig {
+    fn default() -> Self {
+        Self {
+            primary: StoragePathEntry::default(),
+            cache: None,
+            archive: None,
+            temp_dir: None,
+            backup_paths: Vec::new(),
+            migration_paths: MigrationPathsConfig::default(),
+        }
+    }
+}
+
+/// Individual storage path entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoragePathEntry {
+    /// Storage backend type
+    pub backend: StorageBackendType,
+
+    /// Connection string or path
+    pub connection: String,
+
+    /// Additional configuration parameters
+    pub params: HashMap<String, String>,
+}
+
+impl Default for StoragePathEntry {
+    fn default() -> Self {
+        Self {
+            backend: StorageBackendType::Postgres,
+            connection: "postgresql://localhost:5432/schema_registry".to_string(),
+            params: HashMap::new(),
+        }
+    }
+}
+
+/// Storage backend types
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum StorageBackendType {
+    /// PostgreSQL database
+    Postgres,
+    /// Redis cache
+    Redis,
+    /// S3-compatible object storage
+    S3,
+    /// Local file system
+    File,
+}
+
+/// Migration paths configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MigrationPathsConfig {
+    /// Source path for migrations
+    pub source: Option<String>,
+
+    /// Destination path for migrations
+    pub destination: Option<String>,
+
+    /// Schema for migration scripts
+    pub scripts_path: Option<String>,
+}
+
+impl Default for MigrationPathsConfig {
+    fn default() -> Self {
+        Self {
+            source: None,
+            destination: None,
+            scripts_path: None,
+        }
+    }
+}
+
+// ============================================================================
+// Phase 2B: Versioning Policies Configuration Adapter
+// ============================================================================
+
+/// Configuration for versioning policies loaded from Config Manager
+///
+/// This defines how schema versions are managed, including strategies,
+/// retention, and compatibility requirements.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersioningPoliciesConfig {
+    /// Default versioning strategy
+    pub default_strategy: VersioningStrategy,
+
+    /// Version retention policy
+    pub retention: VersionRetentionPolicy,
+
+    /// Compatibility enforcement settings
+    pub compatibility: CompatibilityEnforcementConfig,
+
+    /// Prerelease version handling
+    pub prerelease: PrereleaseConfig,
+
+    /// Deprecation policy
+    pub deprecation: DeprecationPolicy,
+}
+
+impl Default for VersioningPoliciesConfig {
+    fn default() -> Self {
+        Self {
+            default_strategy: VersioningStrategy::Semantic,
+            retention: VersionRetentionPolicy::default(),
+            compatibility: CompatibilityEnforcementConfig::default(),
+            prerelease: PrereleaseConfig::default(),
+            deprecation: DeprecationPolicy::default(),
+        }
+    }
+}
+
+/// Versioning strategy
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VersioningStrategy {
+    /// Semantic versioning (MAJOR.MINOR.PATCH)
+    Semantic,
+    /// Auto-increment (simple integer versions)
+    AutoIncrement,
+    /// Timestamp-based versioning
+    Timestamp,
+    /// Hash-based versioning (content-addressable)
+    ContentHash,
+}
+
+/// Version retention policy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VersionRetentionPolicy {
+    /// Maximum number of versions to retain per schema
+    pub max_versions: Option<u32>,
+
+    /// Maximum age of versions to retain (in days)
+    pub max_age_days: Option<u32>,
+
+    /// Always retain the latest N versions regardless of age
+    pub keep_latest: u32,
+
+    /// Retain versions that are currently in use
+    pub retain_in_use: bool,
+}
+
+impl Default for VersionRetentionPolicy {
+    fn default() -> Self {
+        Self {
+            max_versions: None,
+            max_age_days: None,
+            keep_latest: 5,
+            retain_in_use: true,
+        }
+    }
+}
+
+/// Compatibility enforcement configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompatibilityEnforcementConfig {
+    /// Default compatibility mode
+    pub default_mode: String,
+
+    /// Enforce compatibility checks before registration
+    pub enforce_on_register: bool,
+
+    /// Allow compatibility mode overrides per schema
+    pub allow_overrides: bool,
+
+    /// Compatibility modes allowed for override
+    pub allowed_modes: Vec<String>,
+}
+
+impl Default for CompatibilityEnforcementConfig {
+    fn default() -> Self {
+        Self {
+            default_mode: "backward".to_string(),
+            enforce_on_register: true,
+            allow_overrides: false,
+            allowed_modes: vec![
+                "backward".to_string(),
+                "forward".to_string(),
+                "full".to_string(),
+                "none".to_string(),
+            ],
+        }
+    }
+}
+
+/// Prerelease version configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PrereleaseConfig {
+    /// Allow prerelease versions
+    pub allow_prerelease: bool,
+
+    /// Prerelease suffixes allowed (e.g., alpha, beta, rc)
+    pub allowed_suffixes: Vec<String>,
+
+    /// Auto-promote prereleases after duration (in days, 0 = disabled)
+    pub auto_promote_days: u32,
+}
+
+impl Default for PrereleaseConfig {
+    fn default() -> Self {
+        Self {
+            allow_prerelease: true,
+            allowed_suffixes: vec![
+                "alpha".to_string(),
+                "beta".to_string(),
+                "rc".to_string(),
+            ],
+            auto_promote_days: 0,
+        }
+    }
+}
+
+/// Deprecation policy
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeprecationPolicy {
+    /// Deprecation notice period (in days)
+    pub notice_period_days: u32,
+
+    /// Allow immediate deprecation without notice
+    pub allow_immediate: bool,
+
+    /// Auto-archive deprecated versions after days
+    pub auto_archive_days: Option<u32>,
+}
+
+impl Default for DeprecationPolicy {
+    fn default() -> Self {
+        Self {
+            notice_period_days: 30,
+            allow_immediate: false,
+            auto_archive_days: Some(90),
+        }
+    }
+}
+
+// ============================================================================
+// Phase 2B: Validation Settings Configuration Adapter
+// ============================================================================
+
+/// Comprehensive validation settings loaded from Config Manager
+///
+/// This extends the basic ValidationConfig with additional settings
+/// for LLM-specific validation, custom rules, and advanced options.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationSettingsConfig {
+    /// Core validation settings
+    pub core: ValidationConfig,
+
+    /// LLM-specific validation settings
+    pub llm: LlmValidationSettings,
+
+    /// Custom rule configuration
+    pub custom_rules: CustomRulesConfig,
+
+    /// Performance thresholds
+    pub performance: PerformanceThresholds,
+
+    /// Result filtering and reporting
+    pub reporting: ValidationReportingConfig,
+}
+
+impl Default for ValidationSettingsConfig {
+    fn default() -> Self {
+        Self {
+            core: ValidationConfig::default(),
+            llm: LlmValidationSettings::default(),
+            custom_rules: CustomRulesConfig::default(),
+            performance: PerformanceThresholds::default(),
+            reporting: ValidationReportingConfig::default(),
+        }
+    }
+}
+
+/// LLM-specific validation settings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LlmValidationSettings {
+    /// Enable LLM-specific validation rules
+    pub enabled: bool,
+
+    /// Require descriptions for all fields
+    pub require_descriptions: bool,
+
+    /// Require examples for schemas
+    pub require_examples: bool,
+
+    /// Minimum description length
+    pub min_description_length: usize,
+
+    /// Maximum token count estimate for schemas
+    pub max_token_estimate: Option<usize>,
+
+    /// Validate field names for LLM friendliness
+    pub validate_field_names: bool,
+}
+
+impl Default for LlmValidationSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            require_descriptions: false,
+            require_examples: false,
+            min_description_length: 10,
+            max_token_estimate: None,
+            validate_field_names: true,
+        }
+    }
+}
+
+/// Custom validation rules configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomRulesConfig {
+    /// Enable custom rule execution
+    pub enabled: bool,
+
+    /// Path to custom rule definitions
+    pub rules_path: Option<String>,
+
+    /// Inline rule definitions
+    pub inline_rules: Vec<CustomPolicyRule>,
+
+    /// Maximum execution time per rule (in milliseconds)
+    pub max_execution_ms: u64,
+}
+
+impl Default for CustomRulesConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            rules_path: None,
+            inline_rules: Vec::new(),
+            max_execution_ms: 1000,
+        }
+    }
+}
+
+/// Performance validation thresholds
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PerformanceThresholds {
+    /// Maximum nesting depth
+    pub max_depth: usize,
+
+    /// Maximum number of properties/fields
+    pub max_properties: usize,
+
+    /// Maximum array items constraint
+    pub max_array_items: Option<usize>,
+
+    /// Maximum regex complexity score
+    pub max_regex_complexity: usize,
+
+    /// Warn on potential performance issues
+    pub warn_on_issues: bool,
+}
+
+impl Default for PerformanceThresholds {
+    fn default() -> Self {
+        Self {
+            max_depth: 50,
+            max_properties: 500,
+            max_array_items: Some(10000),
+            max_regex_complexity: 100,
+            warn_on_issues: true,
+        }
+    }
+}
+
+/// Validation reporting configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationReportingConfig {
+    /// Include warnings in results
+    pub include_warnings: bool,
+
+    /// Include info-level messages
+    pub include_info: bool,
+
+    /// Maximum issues to report
+    pub max_issues: usize,
+
+    /// Group issues by category
+    pub group_by_category: bool,
+
+    /// Include suggested fixes
+    pub include_suggestions: bool,
+}
+
+impl Default for ValidationReportingConfig {
+    fn default() -> Self {
+        Self {
+            include_warnings: true,
+            include_info: false,
+            max_issues: 100,
+            group_by_category: true,
+            include_suggestions: true,
+        }
+    }
+}
+
+// ============================================================================
+// Phase 2B: Extended Config Consumer Trait
+// ============================================================================
+
+/// Extended trait for consuming Phase 2B configuration from Config Manager
+///
+/// This trait extends the base ConfigConsumer with additional methods
+/// for loading schema sources, storage paths, versioning policies,
+/// and comprehensive validation settings.
+pub trait ConfigConsumerExt: ConfigConsumer {
+    /// Load schema sources configuration
+    fn load_schema_sources(&self) -> Result<SchemaSourcesConfig, ConfigError>;
+
+    /// Load storage paths configuration
+    fn load_storage_paths(&self) -> Result<StoragePathsConfig, ConfigError>;
+
+    /// Load versioning policies configuration
+    fn load_versioning_policies(&self) -> Result<VersioningPoliciesConfig, ConfigError>;
+
+    /// Load comprehensive validation settings
+    fn load_validation_settings(&self) -> Result<ValidationSettingsConfig, ConfigError>;
+}
+
+impl ConfigConsumerExt for ConfigManagerAdapter {
+    fn load_schema_sources(&self) -> Result<SchemaSourcesConfig, ConfigError> {
+        info!("Loading schema sources configuration from Config Manager");
+
+        if let Ok(Some(value)) = self.get_config_value("schema-sources") {
+            if let Ok(config) = self.parse_value::<SchemaSourcesConfig>(&value) {
+                debug!("Loaded schema sources configuration from Config Manager");
+                return Ok(config);
+            }
+        }
+
+        debug!("Using default schema sources configuration");
+        Ok(SchemaSourcesConfig::default())
+    }
+
+    fn load_storage_paths(&self) -> Result<StoragePathsConfig, ConfigError> {
+        info!("Loading storage paths configuration from Config Manager");
+
+        if let Ok(Some(value)) = self.get_config_value("storage-paths") {
+            if let Ok(config) = self.parse_value::<StoragePathsConfig>(&value) {
+                debug!("Loaded storage paths configuration from Config Manager");
+                return Ok(config);
+            }
+        }
+
+        debug!("Using default storage paths configuration");
+        Ok(StoragePathsConfig::default())
+    }
+
+    fn load_versioning_policies(&self) -> Result<VersioningPoliciesConfig, ConfigError> {
+        info!("Loading versioning policies configuration from Config Manager");
+
+        if let Ok(Some(value)) = self.get_config_value("versioning-policies") {
+            if let Ok(config) = self.parse_value::<VersioningPoliciesConfig>(&value) {
+                debug!("Loaded versioning policies configuration from Config Manager");
+                return Ok(config);
+            }
+        }
+
+        debug!("Using default versioning policies configuration");
+        Ok(VersioningPoliciesConfig::default())
+    }
+
+    fn load_validation_settings(&self) -> Result<ValidationSettingsConfig, ConfigError> {
+        info!("Loading validation settings configuration from Config Manager");
+
+        if let Ok(Some(value)) = self.get_config_value("validation-settings") {
+            if let Ok(config) = self.parse_value::<ValidationSettingsConfig>(&value) {
+                debug!("Loaded validation settings configuration from Config Manager");
+                return Ok(config);
+            }
+        }
+
+        debug!("Using default validation settings configuration");
+        Ok(ValidationSettingsConfig::default())
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -468,5 +1065,56 @@ mod tests {
         assert_eq!(config.max_schema_size, 1024 * 1024);
         assert!(config.performance_checks);
         assert!(config.security_checks);
+    }
+
+    #[test]
+    fn test_schema_sources_config_defaults() {
+        let config = SchemaSourcesConfig::default();
+        assert!(config.sources.is_empty());
+        assert!(!config.enable_discovery);
+    }
+
+    #[test]
+    fn test_storage_paths_config_defaults() {
+        let config = StoragePathsConfig::default();
+        assert_eq!(config.primary.backend, StorageBackendType::Postgres);
+        assert!(config.cache.is_none());
+        assert!(config.archive.is_none());
+    }
+
+    #[test]
+    fn test_versioning_policies_config_defaults() {
+        let config = VersioningPoliciesConfig::default();
+        assert_eq!(config.default_strategy, VersioningStrategy::Semantic);
+        assert!(config.compatibility.enforce_on_register);
+        assert_eq!(config.retention.keep_latest, 5);
+    }
+
+    #[test]
+    fn test_validation_settings_config_defaults() {
+        let config = ValidationSettingsConfig::default();
+        assert!(config.llm.enabled);
+        assert!(config.custom_rules.enabled);
+        assert!(config.reporting.include_warnings);
+    }
+
+    #[test]
+    fn test_schema_source_type_serialization() {
+        let source_type = SchemaSourceType::Http;
+        let json = serde_json::to_string(&source_type).unwrap();
+        assert_eq!(json, "\"http\"");
+
+        let parsed: SchemaSourceType = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, SchemaSourceType::Http);
+    }
+
+    #[test]
+    fn test_versioning_strategy_serialization() {
+        let strategy = VersioningStrategy::Semantic;
+        let json = serde_json::to_string(&strategy).unwrap();
+        assert_eq!(json, "\"semantic\"");
+
+        let parsed: VersioningStrategy = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, VersioningStrategy::Semantic);
     }
 }
